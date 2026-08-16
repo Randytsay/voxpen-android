@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    VoxPen is a BYOK app whose custom providers point at user-configured
+    endpoints, including local/private LLM servers reached over a Tailscale
+    (WireGuard) overlay or LAN (e.g. http://100.102.183.27:4000, Ollama on
+    :11434). Android's network security config cannot match raw IPs/CIDR via
+    domain-config, so cleartext is permitted base-wide; traffic to public
+    providers (Groq/OpenAI/OpenRouter) stays HTTPS. This mirrors the desktop
+    build, which makes plain-HTTP calls to the same private endpoints.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
