@@ -110,6 +110,30 @@ class LlmRepositoryTest {
         }
 
     @Test
+    fun `should fail gracefully when custom provider has no base URL`() =
+        runTest {
+            val result = repository.refine(
+                "text", SttLanguage.Auto, "key",
+                provider = LlmProvider.Custom,
+                customBaseUrl = null,
+            )
+            assertThat(result.isFailure).isTrue()
+            assertThat(result.exceptionOrNull()?.message).contains("base URL")
+        }
+
+    @Test
+    fun `should fail gracefully when custom provider base URL is blank`() =
+        runTest {
+            val result = repository.editText(
+                "user message", "key",
+                provider = LlmProvider.Custom,
+                customBaseUrl = "   ",
+            )
+            assertThat(result.isFailure).isTrue()
+            assertThat(result.exceptionOrNull()?.message).contains("base URL")
+        }
+
+    @Test
     fun `should allow empty API key for custom provider in editText`() =
         runTest {
             enqueueSuccess("ok")

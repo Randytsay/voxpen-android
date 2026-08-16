@@ -203,6 +203,22 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `setLlmProvider should not clobber model for provider without presets`() =
+        runTest {
+            val vm = createViewModel()
+            vm.setLlmProvider(LlmProvider.Custom)
+            coVerify(exactly = 0) { preferencesManager.setLlmModel(any()) }
+        }
+
+    @Test
+    fun `setLlmProvider should set default model for provider with presets`() =
+        runTest {
+            val vm = createViewModel()
+            vm.setLlmProvider(LlmProvider.Groq)
+            coVerify { preferencesManager.setLlmModel(LlmProvider.Groq.defaultModelId) }
+        }
+
+    @Test
     fun `testLlmProvider reports success with provider reply`() =
         runTest {
             every { preferencesManager.llmProviderFlow } returns flowOf(LlmProvider.Custom)

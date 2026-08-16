@@ -180,7 +180,11 @@ class SettingsViewModel
         fun setLlmProvider(provider: LlmProvider) {
             viewModelScope.launch {
                 preferencesManager.setLlmProvider(provider)
-                preferencesManager.setLlmModel(provider.defaultModelId)
+                // Custom has no preset models; overwriting would erase the last
+                // selected model and break the customLlmModel fallback.
+                if (provider.defaultModelId.isNotBlank()) {
+                    preferencesManager.setLlmModel(provider.defaultModelId)
+                }
             }
         }
 

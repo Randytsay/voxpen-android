@@ -34,6 +34,9 @@ class LlmRepository
             if (apiKey.isBlank() && provider != LlmProvider.Custom) {
                 return Result.failure(IllegalStateException("API key not configured"))
             }
+            if (provider == LlmProvider.Custom && customBaseUrl.isNullOrBlank()) {
+                return Result.failure(IllegalStateException("Custom LLM base URL not configured"))
+            }
             if (text.isBlank()) {
                 return Result.failure(IllegalArgumentException("Text is empty"))
             }
@@ -85,6 +88,9 @@ class LlmRepository
         ): Result<String> {
             if (apiKey.isBlank() && provider != LlmProvider.Custom) {
                 return Result.failure(IllegalStateException("API key not configured"))
+            }
+            if (provider == LlmProvider.Custom && customBaseUrl.isNullOrBlank()) {
+                return Result.failure(IllegalStateException("Custom LLM base URL not configured"))
             }
             if (userMessage.isBlank()) return Result.failure(IllegalArgumentException("Message is empty"))
 
