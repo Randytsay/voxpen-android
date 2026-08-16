@@ -259,11 +259,17 @@
 
     <!-- LLM Provider -->
     <string name="settings_llm_provider_section">潤稿模型</string>
-    <string name="provider_custom">自訂</string>
+    <string name="provider_custom">自訂（LiteLLM / Ollama）</string>
     <string name="provider_key_configured">API 金鑰已設定 ✓</string>
     <string name="provider_api_key_hint">%1$s API 金鑰</string>
     <string name="provider_custom_base_url">伺服器網址</string>
+    <string name="provider_custom_base_url_hint">API 端點位址（例如 LiteLLM、Ollama 或其他 OpenAI-compatible server）</string>
     <string name="provider_custom_model">模型名稱</string>
+    <string name="provider_test">測試供應商</string>
+    <string name="provider_testing">測試中…</string>
+    <string name="provider_test_ok">供應商可用。%1$s</string>
+    <string name="provider_test_failed">失敗：%1$s</string>
+    <string name="provider_test_no_url">請先輸入伺服器網址</string>
     <string name="model_tag_recommended">推薦</string>
     <string name="model_tag_fast">極速</string>
     <string name="model_tag_cheapest">最省錢</string>

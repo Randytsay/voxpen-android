@@ -37,4 +37,20 @@ data class SettingsUiState(
     val translationTargetLanguage: SttLanguage = SttLanguage.English,
     val autoToneEnabled: Boolean = true,
     val customAppToneRules: Map<String, ToneStyle> = emptyMap(),
+    val llmTestStatus: LlmTestStatus = LlmTestStatus.Idle,
 )
+
+/** Result of the "Test provider" button in settings. */
+sealed interface LlmTestStatus {
+    data object Idle : LlmTestStatus
+    data object Testing : LlmTestStatus
+
+    /** Provider responded; [detail] is a short reply snippet. */
+    data class Success(val detail: String) : LlmTestStatus
+
+    /** Provider call failed; [message] is the underlying error. */
+    data class Error(val message: String) : LlmTestStatus
+
+    /** Custom provider selected but no Base URL entered. */
+    data object NoBaseUrl : LlmTestStatus
+}

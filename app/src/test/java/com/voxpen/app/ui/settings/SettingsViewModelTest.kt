@@ -14,15 +14,24 @@ import com.voxpen.app.data.model.LlmProvider
 import com.voxpen.app.data.model.RecordingMode
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.ToneStyle
+import com.voxpen.app.data.remote.ChatChoice
+import com.voxpen.app.data.remote.ChatCompletionApi
+import com.voxpen.app.data.remote.ChatCompletionApiFactory
+import com.voxpen.app.data.remote.ChatCompletionResponse
+import com.voxpen.app.data.remote.ChatMessage
+import com.voxpen.app.data.repository.LlmRepository
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -38,6 +47,8 @@ class SettingsViewModelTest {
     private val usageLimiter = UsageLimiter()
     private val licenseManager: LicenseManager = mockk(relaxed = true)
     private val proStatusResolver: ProStatusResolver = mockk(relaxed = true)
+    private val apiFactory: ChatCompletionApiFactory = mockk()
+    private val chatCompletionApi: ChatCompletionApi = mockk()
     private val testDispatcher = UnconfinedTestDispatcher()
     private val proStatusFlow = MutableStateFlow<ProStatus>(ProStatus.Free)
 
@@ -63,7 +74,15 @@ class SettingsViewModelTest {
     }
 
     private fun createViewModel() =
-        SettingsViewModel(apiKeyManager, preferencesManager, billingManager, usageLimiter, licenseManager, proStatusResolver)
+        SettingsViewModel(
+            apiKeyManager,
+            preferencesManager,
+            billingManager,
+            usageLimiter,
+            licenseManager,
+            proStatusResolver,
+            LlmRepository(apiFactory),
+        )
 
     @Test
     fun `should emit initial state with defaults`() =
@@ -182,4 +201,58 @@ class SettingsViewModelTest {
         viewModel.removeCustomAppToneRule("com.myapp")
         coVerify { preferencesManager.removeCustomAppToneRule("com.myapp") }
     }
+
+    @Test
+    fun `testLlmProvider reports success with provider reply`() =
+        runTest {
+            every { preferencesManager.llmProviderFlow } returns flowOf(LlmProvider.Custom)
+            every { preferencesManager.customLlmModelFlow } returns flowOf("qwen36-fast")
+            every { apiKeyManager.getCustomBaseUrl() } returns "http://100.102.183.27:4000"
+            every { apiKeyManager.getApiKey(LlmProvider.Custom) } returns "sk-test"
+            every { apiFactory.createForCustom("http://100.102.183.27:4000") } returns chatCompletionApi
+            coEvery { chatCompletionApi.chatCompletion(any(), any()) } returns
+                ChatCompletionResponse(choices = listOf(ChatChoice(message = ChatMessage("assistant", "ok"))))
+            val vm = createViewModel()
+
+            vm.testLlmProvider()
+
+            advanceUntilIdle()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            verify { apiFactory.createForCustom("http://100.102.183.27:4000") }
+            assertThat(vm.uiState.value.llmTestStatus).isEqualTo(LlmTestStatus.Success("ok"))
+        }
+
+    @Test
+    fun `testLlmProvider reports error when repository fails`() =
+        runTest {
+            every { preferencesManager.llmProviderFlow } returns flowOf(LlmProvider.Custom)
+            every { preferencesManager.customLlmModelFlow } returns flowOf("qwen36-fast")
+            every { apiKeyManager.getCustomBaseUrl() } returns "http://100.102.183.27:4000"
+            every { apiKeyManager.getApiKey(LlmProvider.Custom) } returns "sk-test"
+            every { apiFactory.createForCustom(any()) } returns chatCompletionApi
+            coEvery { chatCompletionApi.chatCompletion(any(), any()) } throws IOException("connection refused")
+            val vm = createViewModel()
+
+            vm.testLlmProvider()
+
+            advanceUntilIdle()
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertThat(vm.uiState.value.llmTestStatus)
+                .isEqualTo(LlmTestStatus.Error("connection refused"))
+        }
+
+    @Test
+    fun `testLlmProvider without custom base URL reports no-url without calling repository`() =
+        runTest {
+            every { preferencesManager.llmProviderFlow } returns flowOf(LlmProvider.Custom)
+            every { apiKeyManager.getCustomBaseUrl() } returns ""
+            val vm = createViewModel()
+
+            vm.testLlmProvider()
+
+            assertThat(vm.uiState.value.llmTestStatus).isEqualTo(LlmTestStatus.NoBaseUrl)
+            verify(exactly = 0) { apiFactory.createForCustom(any()) }
+        }
 }

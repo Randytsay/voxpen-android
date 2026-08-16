@@ -15,6 +15,7 @@ import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.LlmProvider
 import com.voxpen.app.data.model.SttProvider
 import com.voxpen.app.data.model.ToneStyle
+import com.voxpen.app.data.repository.LlmRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +35,7 @@ class SettingsViewModel
         private val usageLimiter: UsageLimiter,
         private val licenseManager: LicenseManager,
         private val proStatusResolver: ProStatusResolver,
+        private val llmRepository: LlmRepository,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(SettingsUiState())
         val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -235,6 +237,51 @@ class SettingsViewModel
         fun setCustomBaseUrl(url: String) {
             apiKeyManager.setCustomBaseUrl(url)
             _uiState.update { it.copy(customBaseUrl = url) }
+        }
+
+        /**
+         * Sends a minimal chat request to the current LLM provider to verify the
+         * base URL / model / key configuration, mirroring desktop's
+         * `test_refinement_provider` command.
+         */
+        fun testLlmProvider() {
+            val state = _uiState.value
+            val customBaseUrl =
+                if (state.llmProvider == LlmProvider.Custom) {
+                    state.customBaseUrl.ifBlank { null }
+                } else {
+                    null
+                }
+            if (state.llmProvider == LlmProvider.Custom && customBaseUrl == null) {
+                _uiState.update { it.copy(llmTestStatus = LlmTestStatus.NoBaseUrl) }
+                return
+            }
+            val model =
+                if (state.llmProvider == LlmProvider.Custom) {
+                    state.customLlmModel.ifBlank { state.llmModel }
+                } else {
+                    state.llmModel
+                }
+            val apiKey = apiKeyManager.getApiKey(state.llmProvider).orEmpty()
+            _uiState.update { it.copy(llmTestStatus = LlmTestStatus.Testing) }
+            viewModelScope.launch {
+                llmRepository.editText(
+                    userMessage = "Reply with exactly: ok",
+                    apiKey = apiKey,
+                    model = model,
+                    provider = state.llmProvider,
+                    customBaseUrl = customBaseUrl,
+                ).fold(
+                    onSuccess = { reply ->
+                        _uiState.update { it.copy(llmTestStatus = LlmTestStatus.Success(reply)) }
+                    },
+                    onFailure = { e ->
+                        _uiState.update {
+                            it.copy(llmTestStatus = LlmTestStatus.Error(e.message ?: "Unknown error"))
+                        }
+                    },
+                )
+            }
         }
 
         fun launchPurchaseFlow(activity: Activity) {

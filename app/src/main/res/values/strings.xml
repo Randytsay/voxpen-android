@@ -259,11 +259,17 @@
 
     <!-- LLM Provider -->
     <string name="settings_llm_provider_section">LLM Provider &amp; Model</string>
-    <string name="provider_custom">Custom</string>
+    <string name="provider_custom">Custom / LiteLLM / Ollama</string>
     <string name="provider_key_configured">API key configured ✓</string>
     <string name="provider_api_key_hint">%1$s API Key</string>
     <string name="provider_custom_base_url">Base URL</string>
+    <string name="provider_custom_base_url_hint">API endpoint URL (e.g., LiteLLM, Ollama, or another OpenAI-compatible server)</string>
     <string name="provider_custom_model">Model name</string>
+    <string name="provider_test">Test provider</string>
+    <string name="provider_testing">Testing…</string>
+    <string name="provider_test_ok">Provider works. %1$s</string>
+    <string name="provider_test_failed">Failed: %1$s</string>
+    <string name="provider_test_no_url">Enter a Base URL first</string>
     <string name="model_tag_recommended">Recommended</string>
     <string name="model_tag_fast">Fast</string>
     <string name="model_tag_cheapest">Cheapest</string>

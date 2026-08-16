@@ -704,7 +704,8 @@ private fun CustomProviderFields(
         value = state.customBaseUrl,
         onValueChange = { viewModel.setCustomBaseUrl(it) },
         label = { Text(stringResource(R.string.provider_custom_base_url)) },
-        placeholder = { Text("https://api.example.com/") },
+        placeholder = { Text("http://localhost:11434/") },
+        supportingText = { Text(stringResource(R.string.provider_custom_base_url_hint)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -717,6 +718,48 @@ private fun CustomProviderFields(
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(
+        onClick = { viewModel.testLlmProvider() },
+        enabled = state.llmTestStatus != LlmTestStatus.Testing,
+    ) {
+        Text(
+            if (state.llmTestStatus == LlmTestStatus.Testing) {
+                stringResource(R.string.provider_testing)
+            } else {
+                stringResource(R.string.provider_test)
+            },
+        )
+    }
+    when (val status = state.llmTestStatus) {
+        LlmTestStatus.Idle,
+        LlmTestStatus.Testing,
+        -> Unit
+
+        is LlmTestStatus.Success ->
+            Text(
+                stringResource(R.string.provider_test_ok, status.detail),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+
+        is LlmTestStatus.Error ->
+            Text(
+                stringResource(R.string.provider_test_failed, status.message),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+
+        LlmTestStatus.NoBaseUrl ->
+            Text(
+                stringResource(R.string.provider_test_no_url),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+    }
 }
 
 private fun providerDisplayName(provider: LlmProvider): String =
