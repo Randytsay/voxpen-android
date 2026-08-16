@@ -36,6 +36,42 @@ class ChatCompletionApiFactoryTest {
     }
 
     @Test
+    fun `normalizeBaseUrl appends trailing slash to bare host`() {
+        assertThat(ChatCompletionApiFactory.normalizeBaseUrl("http://100.102.183.27:4000"))
+            .isEqualTo("http://100.102.183.27:4000/")
+    }
+
+    @Test
+    fun `normalizeBaseUrl keeps existing trailing slash`() {
+        assertThat(ChatCompletionApiFactory.normalizeBaseUrl("http://100.102.183.27:4000/"))
+            .isEqualTo("http://100.102.183.27:4000/")
+    }
+
+    @Test
+    fun `normalizeBaseUrl strips trailing v1 path segment`() {
+        assertThat(ChatCompletionApiFactory.normalizeBaseUrl("http://host:4000/v1"))
+            .isEqualTo("http://host:4000/")
+    }
+
+    @Test
+    fun `normalizeBaseUrl strips trailing v1 path segment with slash`() {
+        assertThat(ChatCompletionApiFactory.normalizeBaseUrl("http://host:4000/v1/"))
+            .isEqualTo("http://host:4000/")
+    }
+
+    @Test
+    fun `normalizeBaseUrl trims surrounding whitespace`() {
+        assertThat(ChatCompletionApiFactory.normalizeBaseUrl("  https://api.example.com  "))
+            .isEqualTo("https://api.example.com/")
+    }
+
+    @Test
+    fun `normalizeBaseUrl keeps deep paths intact`() {
+        assertThat(ChatCompletionApiFactory.normalizeBaseUrl("https://my-server.com/openai"))
+            .isEqualTo("https://my-server.com/openai/")
+    }
+
+    @Test
     fun `should cache API instances for same provider`() {
         val api1 = factory.create(LlmProvider.Groq)
         val api2 = factory.create(LlmProvider.Groq)

@@ -27,17 +27,34 @@ class ChatCompletionApiFactory
         }
 
         fun createForCustom(baseUrl: String): ChatCompletionApi {
-            return cache.getOrPut("custom:$baseUrl") {
+            return cache.getOrPut("custom:${normalizeBaseUrl(baseUrl)}") {
                 buildApi(baseUrl)
             }
         }
 
         private fun buildApi(baseUrl: String): ChatCompletionApi {
             return Retrofit.Builder()
-                .baseUrl(baseUrl)
+                .baseUrl(normalizeBaseUrl(baseUrl))
                 .client(client)
                 .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
                 .build()
                 .create(ChatCompletionApi::class.java)
+        }
+
+        companion object {
+            /**
+             * Normalizes a user-entered OpenAI-compatible base URL for Retrofit:
+             * trims whitespace, guarantees a single trailing slash, and de-dups a
+             * trailing `/v1` segment (the API path already starts with `v1/...`).
+             * Mirrors desktop `api_url()` in voxpen-core/src/api/groq.rs.
+             * Example: `http://host:4000/v1` -> `http://host:4000/`.
+             */
+            fun normalizeBaseUrl(raw: String): String {
+                var base = raw.trim().trimEnd('/')
+                if (base.endsWith("/v1", ignoreCase = true)) {
+                    base = base.substring(0, base.length - 3)
+                }
+                return "$base/"
+            }
         }
     }

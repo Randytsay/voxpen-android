@@ -267,6 +267,20 @@ class LlmRepositoryTest {
         }
 
     @Test
+    fun `should hit v1 chat completions when base URL already ends with v1`() =
+        runTest {
+            enqueueSuccess("ok")
+            val baseUrl = server.url("/v1").toString().removeSuffix("/")
+            repository.refine(
+                "text", SttLanguage.English, "key",
+                provider = LlmProvider.Custom,
+                customBaseUrl = baseUrl,
+            )
+            val request = server.takeRequest()
+            assertThat(request.path).isEqualTo("/v1/chat/completions")
+        }
+
+    @Test
     fun `should include speech tag instruction in system prompt`() =
         runTest {
             enqueueSuccess("ok")
