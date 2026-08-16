@@ -104,7 +104,7 @@ class RecordingController(
         val currentSttProvider = sttProvider
         val apiKey = apiKeyManager.getSttApiKey(currentSttProvider)
 
-        if (apiKey.isNullOrBlank()) {
+        if (apiKey.isNullOrBlank() && currentSttProvider != SttProvider.Custom) {
             _uiState.value = ImeUiState.Error(messages.apiKeyNotConfigured())
             return
         }
@@ -126,7 +126,7 @@ class RecordingController(
                 transcribeUseCase(
                     pcmData = pcmData,
                     language = language,
-                    apiKey = apiKey,
+                    apiKey = apiKey.orEmpty(),
                     model = sttModel,
                     vocabularyHint = whisperPrompt,
                     provider = currentSttProvider,

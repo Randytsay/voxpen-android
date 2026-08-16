@@ -112,6 +112,27 @@ class SttRepositoryTest {
         }
 
     @Test
+    fun `should allow empty API key for custom provider`() =
+        runTest {
+            val customApi: SttApi = mockk()
+            every { sttApiFactory.createForCustom("http://100.102.183.27:8001/") } returns customApi
+            coEvery { customApi.transcribe(any(), any(), any(), any(), any(), any()) } returns
+                WhisperResponse(text = "local result")
+
+            val result =
+                repository.transcribe(
+                    wavBytes = ByteArray(10),
+                    language = SttLanguage.Auto,
+                    apiKey = "",
+                    provider = SttProvider.Custom,
+                    customSttBaseUrl = "http://100.102.183.27:8001/",
+                )
+
+            assertThat(result.isSuccess).isTrue()
+            assertThat(result.getOrNull()?.text).isEqualTo("local result")
+        }
+
+    @Test
     fun `should use provided model name in API request`() =
         runTest {
             val modelSlot = slot<RequestBody>()

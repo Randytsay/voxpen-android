@@ -26,7 +26,7 @@ class SttApiFactory
             return create(baseUrl, "provider_stt:${provider.key}")
         }
 
-        fun createForCustom(baseUrl: String): SttApi = create(baseUrl, "custom_stt:$baseUrl")
+        fun createForCustom(baseUrl: String): SttApi = create(baseUrl, "custom_stt:${normalizeBaseUrl(baseUrl)}")
 
         private fun create(
             baseUrl: String,
@@ -41,6 +41,19 @@ class SttApiFactory
                     .create(SttApi::class.java)
             }
 
-        private fun normalizeBaseUrl(baseUrl: String): String =
-            if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        companion object {
+            /**
+             * Normalizes a user-entered OpenAI-compatible base URL for Retrofit:
+             * trims whitespace, guarantees a single trailing slash, and de-dups a
+             * trailing `/v1` segment (the API path already starts with `v1/...`).
+             * Mirrors desktop `api_url()` in voxpen-core/src/api/groq.rs.
+             */
+            fun normalizeBaseUrl(raw: String): String {
+                var base = raw.trim().trimEnd('/')
+                if (base.endsWith("/v1", ignoreCase = true)) {
+                    base = base.substring(0, base.length - 3)
+                }
+                return "$base/"
+            }
+        }
     }

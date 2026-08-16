@@ -30,7 +30,7 @@ class SttRepository
             provider: SttProvider = SttProvider.DEFAULT,
             customSttBaseUrl: String? = null,
         ): Result<TranscriptionResult> {
-            if (apiKey.isBlank()) {
+            if (apiKey.isBlank() && provider != SttProvider.Custom) {
                 return Result.failure(IllegalStateException("API key not configured"))
             }
 

@@ -22,6 +22,24 @@ class SttApiFactoryTest {
     }
 
     @Test
+    fun `normalizeBaseUrl appends trailing slash to bare host`() {
+        assertThat(SttApiFactory.normalizeBaseUrl("http://100.102.183.27:8001"))
+            .isEqualTo("http://100.102.183.27:8001/")
+    }
+
+    @Test
+    fun `normalizeBaseUrl strips trailing v1 path segment`() {
+        assertThat(SttApiFactory.normalizeBaseUrl("http://100.102.183.27:8001/v1"))
+            .isEqualTo("http://100.102.183.27:8001/")
+    }
+
+    @Test
+    fun `normalizeBaseUrl keeps existing trailing slash`() {
+        assertThat(SttApiFactory.normalizeBaseUrl("http://100.102.183.27:8001/"))
+            .isEqualTo("http://100.102.183.27:8001/")
+    }
+
+    @Test
     fun `should create separate instances for different URLs`() {
         val api1 = factory.createForCustom("https://server-a.example.com/")
         val api2 = factory.createForCustom("https://server-b.example.com/")
