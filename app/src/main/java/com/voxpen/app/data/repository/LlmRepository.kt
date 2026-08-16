@@ -31,7 +31,7 @@ class LlmRepository
             translationEnabled: Boolean = false,
             targetLanguage: SttLanguage = SttLanguage.English,
         ): Result<String> {
-            if (apiKey.isBlank()) {
+            if (apiKey.isBlank() && provider != LlmProvider.Custom) {
                 return Result.failure(IllegalStateException("API key not configured"))
             }
             if (text.isBlank()) {
@@ -83,7 +83,9 @@ class LlmRepository
             provider: LlmProvider = LlmProvider.Groq,
             customBaseUrl: String? = null,
         ): Result<String> {
-            if (apiKey.isBlank()) return Result.failure(IllegalStateException("API key not configured"))
+            if (apiKey.isBlank() && provider != LlmProvider.Custom) {
+                return Result.failure(IllegalStateException("API key not configured"))
+            }
             if (userMessage.isBlank()) return Result.failure(IllegalArgumentException("Message is empty"))
 
             return try {

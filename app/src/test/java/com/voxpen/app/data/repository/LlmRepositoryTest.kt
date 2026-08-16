@@ -96,6 +96,39 @@ class LlmRepositoryTest {
         }
 
     @Test
+    fun `should allow empty API key for custom provider`() =
+        runTest {
+            enqueueSuccess("ok")
+            val result = repository.refine(
+                "text", SttLanguage.Auto, "",
+                provider = LlmProvider.Custom,
+                customBaseUrl = server.url("/").toString(),
+            )
+            assertThat(result.isSuccess).isTrue()
+            // OkHttp trims trailing whitespace: "Bearer " arrives as "Bearer".
+            assertThat(server.takeRequest().getHeader("Authorization")).isEqualTo("Bearer")
+        }
+
+    @Test
+    fun `should allow empty API key for custom provider in editText`() =
+        runTest {
+            enqueueSuccess("ok")
+            val result = repository.editText(
+                "user message", "",
+                provider = LlmProvider.Custom,
+                customBaseUrl = server.url("/").toString(),
+            )
+            assertThat(result.isSuccess).isTrue()
+        }
+
+    @Test
+    fun `should still fail fast on empty API key for non-custom provider`() =
+        runTest {
+            val result = repository.editText("user message", "", provider = LlmProvider.Groq)
+            assertThat(result.isFailure).isTrue()
+        }
+
+    @Test
     fun `should return failure on empty text`() =
         runTest {
             val result = repository.refine("", SttLanguage.Auto, "key")
