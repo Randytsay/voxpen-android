@@ -20,7 +20,9 @@ class EditTextUseCase
             provider: LlmProvider = LlmProvider.Groq,
             customBaseUrl: String? = null,
         ): Result<String> {
-            if (apiKey.isBlank()) return Result.failure(IllegalStateException("API key not configured"))
+            if (apiKey.isBlank() && provider != LlmProvider.Custom) {
+                return Result.failure(IllegalStateException("API key not configured"))
+            }
             if (selectedText.isBlank()) return Result.failure(IllegalArgumentException("No text selected"))
 
             val userMessage = EditPrompt.build(selectedText, instruction, language)

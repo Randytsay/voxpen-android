@@ -61,6 +61,29 @@ class EditTextUseCaseTest {
         }
 
     @Test
+    fun `should allow blank api key for custom provider`() =
+        runTest {
+            every { apiFactory.createForCustom("http://100.102.183.27:4000") } returns chatCompletionApi
+            coEvery { chatCompletionApi.chatCompletion(any(), any()) } returns
+                ChatCompletionResponse(
+                    choices = listOf(
+                        ChatChoice(message = ChatMessage(role = "assistant", content = "Revised")),
+                    ),
+                )
+
+            val result = useCase(
+                selectedText = "hello",
+                instruction = "make it formal",
+                language = SttLanguage.English,
+                apiKey = "",
+                provider = LlmProvider.Custom,
+                customBaseUrl = "http://100.102.183.27:4000",
+            )
+            assertThat(result.isSuccess).isTrue()
+            assertThat(result.getOrNull()).isEqualTo("Revised")
+        }
+
+    @Test
     fun `should fail when selected text is blank`() =
         runTest {
             val result = useCase(

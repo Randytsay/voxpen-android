@@ -709,14 +709,20 @@ class VoxPenIME : InputMethodService() {
             val llmProvider = preferencesManager.llmProviderFlow.first()
             val apiKey = apiKeyManager.getApiKey(llmProvider)
                 ?: apiKeyManager.getGroqApiKey()
-            if (apiKey.isNullOrBlank()) {
+            if (apiKey.isNullOrBlank() && llmProvider != com.voxpen.app.data.model.LlmProvider.Custom) {
                 showStatusRow("API key not configured", showProgress = false)
                 candidateBar?.postDelayed({ recordingController.dismiss() }, 2000)
                 return@launch
             }
 
             val language = preferencesManager.languageFlow.first()
-            val llmModel = preferencesManager.llmModelFlow.first()
+            val llmModel = if (llmProvider == com.voxpen.app.data.model.LlmProvider.Custom) {
+                preferencesManager.customLlmModelFlow.first().ifBlank {
+                    preferencesManager.llmModelFlow.first()
+                }
+            } else {
+                preferencesManager.llmModelFlow.first()
+            }
             val customBaseUrl = if (llmProvider == com.voxpen.app.data.model.LlmProvider.Custom) {
                 apiKeyManager.getCustomBaseUrl()
             } else {
@@ -727,7 +733,7 @@ class VoxPenIME : InputMethodService() {
                 selectedText = selectedText,
                 instruction = instruction,
                 language = language,
-                apiKey = apiKey,
+                apiKey = apiKey.orEmpty(),
                 model = llmModel,
                 provider = llmProvider,
                 customBaseUrl = customBaseUrl,
