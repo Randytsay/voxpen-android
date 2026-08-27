@@ -11,10 +11,13 @@ object ImeResultCommitPolicy {
     ): String? {
         if (!autoInsertEnabled) return null
 
-        return when (state) {
-            is ImeUiState.Result -> state.text
-            is ImeUiState.Refined -> state.refined
-            else -> null
-        }
+        val candidate =
+            when (state) {
+                is ImeUiState.Result -> state.text
+                is ImeUiState.Refined -> state.refined
+                else -> null
+            }
+
+        return candidate?.takeIf { it.isNotBlank() }
     }
 }

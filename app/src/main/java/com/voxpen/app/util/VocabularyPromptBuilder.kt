@@ -21,7 +21,7 @@ object VocabularyPromptBuilder {
         var usedTokens = 0
         for (word in vocabulary) {
             val wordTokens = estimateTokens(word) + 1 // +1 for ", " separator
-            if (usedTokens + wordTokens > remainingBudget) break
+            if (usedTokens + wordTokens > remainingBudget) continue
             selected.add(word)
             usedTokens += wordTokens
         }

@@ -121,7 +121,7 @@ class LlmRepository
         companion object {
             private const val LLM_MODEL = "llama-3.3-70b-versatile"
             private const val TEMPERATURE = 0.3
-            private const val MAX_TOKENS = 2048
+            private const val MAX_TOKENS = 4096
 
             private const val SPEECH_TAG_INSTRUCTION =
                 "\n\nIMPORTANT: The user's speech is wrapped in <speech></speech> tags. " +

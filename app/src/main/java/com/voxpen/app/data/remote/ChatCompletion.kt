@@ -14,7 +14,7 @@ data class ChatCompletionRequest(
     val model: String,
     val messages: List<ChatMessage>,
     val temperature: Double = 0.3,
-    @SerialName("max_tokens") val maxTokens: Int = 2048,
+    @SerialName("max_tokens") val maxTokens: Int = 4096,
     @SerialName("reasoning_format") val reasoningFormat: String? = null,
 )
 

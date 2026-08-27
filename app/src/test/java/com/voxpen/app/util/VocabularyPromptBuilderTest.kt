@@ -32,6 +32,19 @@ class VocabularyPromptBuilderTest {
     }
 
     @Test
+    fun `should skip oversized word and keep later vocabulary that fits`() {
+        val oversized = "超".repeat(120)
+        val result =
+            VocabularyPromptBuilder.buildWhisperPrompt(
+                SttLanguage.Chinese,
+                listOf(oversized, "語墨"),
+            )
+
+        assertThat(result).doesNotContain(oversized)
+        assertThat(result).contains("語墨")
+    }
+
+    @Test
     fun `should return empty string for LLM suffix when vocabulary is empty`() {
         val result = VocabularyPromptBuilder.buildLlmSuffix(SttLanguage.Chinese, emptyList())
         assertThat(result).isEmpty()
