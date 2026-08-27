@@ -13,6 +13,7 @@ import com.voxpen.app.billing.BillingManager
 import com.voxpen.app.billing.LicenseManager
 import com.voxpen.app.billing.ProStatusResolver
 import com.voxpen.app.data.local.AppDatabase
+import com.voxpen.app.data.local.CorrectionMemoryDao
 import com.voxpen.app.data.local.DictionaryDao
 import com.voxpen.app.data.local.TranscriptionDao
 import dagger.Module
@@ -76,6 +77,7 @@ object AppModule {
                 AppDatabase.MIGRATION_1_2,
                 AppDatabase.MIGRATION_2_3,
                 AppDatabase.MIGRATION_3_4,
+                AppDatabase.MIGRATION_4_5,
             )
             .build()
 
@@ -90,6 +92,12 @@ object AppModule {
         database: AppDatabase,
     ): DictionaryDao =
         database.dictionaryDao()
+
+    @Provides
+    fun provideCorrectionMemoryDao(
+        database: AppDatabase,
+    ): CorrectionMemoryDao =
+        database.correctionMemoryDao()
 
     @Provides
     @Singleton
@@ -130,21 +138,6 @@ object AppModule {
             licenseStatusFlow =
                 licenseManager.proStatus,
             scope = scope,
-
-            /*
-             * Personal Build
-             *
-             * Debug APK：
-             * personalBuild = true
-             *
-             * Release APK：
-             * personalBuild = false
-             *
-             * 因此自己的 Debug 版本直接取得
-             * PERSONAL Pro 狀態，
-             * 正式 Release 還是維持原本
-             * Google Play / License 邏輯。
-             */
             personalBuild =
                 BuildConfig.DEBUG,
         )
