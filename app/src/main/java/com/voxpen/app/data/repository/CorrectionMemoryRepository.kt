@@ -7,7 +7,6 @@ import com.voxpen.app.data.local.CorrectionMemoryEntity
 import com.voxpen.app.data.local.CorrectionScope
 import com.voxpen.app.ime.CorrectionLearningCandidate
 import kotlinx.coroutines.flow.Flow
-import java.util.regex.Pattern
 import javax.inject.Inject
 import javax.inject.Singleton
 
