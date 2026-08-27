@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/soanseng/voxpen-android/releases"><img src="https://img.shields.io/github/v/release/soanseng/voxpen-android?style=flat-square" alt="Release" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/soanseng/voxpen-android?style=flat-square" alt="License" /></a>
-  <a href="https://github.com/soanseng/voxpen-android/actions"><img src="https://img.shields.io/github/actions/workflow/status/soanseng/voxpen-android/ci.yml?style=flat-square&label=CI" alt="CI" /></a>
+  <a href="https://github.com/Randytsay/voxpen-android/releases"><img src="https://img.shields.io/github/v/release/Randytsay/voxpen-android?style=flat-square" alt="Release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Randytsay/voxpen-android?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/Randytsay/voxpen-android/actions"><img src="https://img.shields.io/github/actions/workflow/status/Randytsay/voxpen-android/ci.yml?style=flat-square&label=CI" alt="CI" /></a>
   <img src="https://img.shields.io/badge/Android-8.0%2B-green?style=flat-square" alt="Min SDK 26" />
 </p>
 
@@ -46,7 +46,21 @@ VoxPen 是一款 Android 語音鍵盤，透過 Whisper 將語音轉為文字，�
 ## 功能特色
 
 ### 語音聽寫
-點擊麥克風說話，VoxPen 透過 Whisper 轉錄，可選擇以 LLM 潤稿，候選列同時顯示原文與潤稿版本。點擊即可插入。
+點擊麥克風說話，VoxPen 透過 Whisper 轉錄，可選擇以 LLM 潤稿，並在候選列顯示辨識結果。預設需點擊候選文字才會插入；也可以開啟「辨識結果自動插入」。
+
+### 辨識結果自動插入
+至 **設定 → 辨識結果自動插入** 開啟後，完成辨識的文字會直接放入目前使用中的文字欄位：
+
+- 未啟用潤稿時，自動插入原始 `Result` 辨識文字。
+- 啟用潤稿時，`Refining` 階段不插入，等待完成後自動插入 `Refined` 最終文字。
+- 潤稿失敗時，回退並只自動插入一次原始辨識文字。
+- 語音指令、編輯指令與錯誤訊息不會被自動插入。
+- 只會插入文字，不會自動按 Enter 或送出訊息。
+
+關閉此設定時，維持原本的候選列操作方式不變。
+
+### 自定義詞彙
+可在「字典」加入人名、地名與專有名詞。標記為重要詞彙後，會優先提供給語音辨識與 LLM 潤稿；最近的字典詞彙也會提供給語音流程，實際數量仍受服務商 token 預算限制。Free 使用者最多可儲存 10 個詞彙，Pro 版本則支援無限詞彙。
 
 ### 翻譯模式
 說 A 語言，輸出 B 語言。直接在鍵盤上快速切換翻譯目標語言，無需進入設定。
@@ -68,6 +82,21 @@ VoxPen 偵測目前使用的 App，自動選擇適合的寫作風格 — 通訊�
 - **無遙測、無分析、無使用者帳號**
 - API 金鑰以 Android Keystore 加密儲存
 - 僅需 2 個權限：`INTERNET` + `RECORD_AUDIO`
+
+## Personal Build 與免費額度
+
+這個個人版本保留 **Personal Build** 模式：Debug APK 會以 Personal Pro 狀態進行本機測試；Release APK 則維持原本的授權流程。
+
+非 Pro 使用者的每日限制如下：
+
+| 使用項目 | 免費額度 |
+|----------|----------|
+| 語音輸入 | 每日 30 次 |
+| LLM 潤稿 | 每日 10 次 |
+| 音訊/影片檔案轉錄 | 每日 2 次 |
+| 自定義詞彙 | 共 10 個 |
+
+Personal/Pro 版本不受上述免費額度限制。
 
 ## 鍵盤配置
 
@@ -113,7 +142,7 @@ Whisper 支援 99 種語言的語音轉文字。VoxPen 目前提供 3 種語言 
 
 ### 從 Release 安裝
 
-1. 從 [Releases](https://github.com/soanseng/voxpen-android/releases) 下載最新 APK
+1. 從 [Releases](https://github.com/Randytsay/voxpen-android/releases) 下載最新 APK
 2. 安裝至你的 Android 裝置（8.0 以上）
 3. 依照引導精靈設定 API 金鑰
 
@@ -122,7 +151,7 @@ Whisper 支援 99 種語言的語音轉文字。VoxPen 目前提供 3 種語言 
 **前置需求**：Android Studio Ladybug+ / JDK 17
 
 ```bash
-git clone https://github.com/soanseng/voxpen-android.git
+git clone https://github.com/Randytsay/voxpen-android.git
 cd voxpen-android
 ./gradlew assembleDebug
 ```

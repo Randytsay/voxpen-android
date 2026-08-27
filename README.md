@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/soanseng/voxpen-android/releases"><img src="https://img.shields.io/github/v/release/soanseng/voxpen-android?style=flat-square" alt="Release" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/soanseng/voxpen-android?style=flat-square" alt="License" /></a>
-  <a href="https://github.com/soanseng/voxpen-android/actions"><img src="https://img.shields.io/github/actions/workflow/status/soanseng/voxpen-android/ci.yml?style=flat-square&label=CI" alt="CI" /></a>
+  <a href="https://github.com/Randytsay/voxpen-android/releases"><img src="https://img.shields.io/github/v/release/Randytsay/voxpen-android?style=flat-square" alt="Release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Randytsay/voxpen-android?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/Randytsay/voxpen-android/actions"><img src="https://img.shields.io/github/actions/workflow/status/Randytsay/voxpen-android/ci.yml?style=flat-square&label=CI" alt="CI" /></a>
   <img src="https://img.shields.io/badge/Android-8.0%2B-green?style=flat-square" alt="Min SDK 26" />
 </p>
 
@@ -46,7 +46,21 @@ VoxPen is an Android voice keyboard that transcribes your speech with Whisper, r
 ## Features
 
 ### Voice Dictation
-Tap the mic and speak. VoxPen sends audio to Whisper for transcription, optionally refines with an LLM, and shows both versions in the candidate bar. Tap to insert.
+Tap the mic and speak. VoxPen sends audio to Whisper for transcription, optionally refines with an LLM, and shows the result in the candidate bar. By default, tap a candidate to insert it; you can enable Automatic Result Insertion to insert the final result automatically.
+
+### Automatic Result Insertion
+Enable **Settings → Automatic Result Insertion** to place completed recognition text directly into the active text field:
+
+- Without refinement, the original `Result` text is inserted automatically.
+- With refinement enabled, VoxPen waits during `Refining` and inserts the final `Refined` text.
+- If refinement fails, the original recognized text is inserted once as a fallback.
+- Voice commands, edit instructions, and error messages are never auto-inserted.
+- This feature only inserts text; it never presses Enter or sends a message automatically.
+
+When the setting is off, the existing candidate-bar workflow remains unchanged.
+
+### Custom Vocabulary
+Add names, places, and specialized terms in the Dictionary. Star important entries to prioritize them in recognition and LLM refinement prompts; recent dictionary entries are also supplied to the voice pipeline, subject to the provider token budget. Free users can store up to 10 dictionary entries, while Pro builds support unlimited entries.
 
 ### Translation Mode
 Speak in one language, output in another. Quick-switch target languages directly from the keyboard — no need to open Settings.
@@ -68,6 +82,21 @@ Transcribe audio/video files with progress tracking. Export as TXT or SRT subtit
 - **No telemetry**, no analytics, no user accounts
 - API keys encrypted with Android Keystore
 - Only 2 permissions: `INTERNET` + `RECORD_AUDIO`
+
+## Personal Build and Free Limits
+
+This personal fork keeps a **Personal Build** mode for debug APKs: debug builds resolve to the personal Pro status for local testing, while release builds retain the normal licensing flow.
+
+For non-Pro users, the daily limits are:
+
+| Usage | Free limit |
+|-------|------------|
+| Voice inputs | 30 per day |
+| LLM refinements | 10 per day |
+| Audio/video file transcriptions | 2 per day |
+| Custom vocabulary entries | 10 total |
+
+Personal/Pro builds are not subject to these free-tier limits.
 
 ## Keyboard Layout
 
@@ -113,7 +142,7 @@ Whisper supports 99 languages for STT. VoxPen currently exposes 3 + auto-detect 
 
 ### Install from Release
 
-1. Download the latest APK from [Releases](https://github.com/soanseng/voxpen-android/releases)
+1. Download the latest APK from [Releases](https://github.com/Randytsay/voxpen-android/releases)
 2. Install on your Android device (8.0+)
 3. Follow the onboarding wizard to set up your API key
 
@@ -122,7 +151,7 @@ Whisper supports 99 languages for STT. VoxPen currently exposes 3 + auto-detect 
 **Prerequisites**: Android Studio Ladybug+ / JDK 17
 
 ```bash
-git clone https://github.com/soanseng/voxpen-android.git
+git clone https://github.com/Randytsay/voxpen-android.git
 cd voxpen-android
 ./gradlew assembleDebug
 ```
