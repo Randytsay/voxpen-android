@@ -14,6 +14,7 @@ data class SettingsUiState(
     val language: SttLanguage = SttLanguage.Auto,
     val recordingMode: RecordingMode = RecordingMode.TAP_TO_TOGGLE,
     val refinementEnabled: Boolean = true,
+    val autoInsertResult: Boolean = PreferencesManager.DEFAULT_AUTO_INSERT_RESULT,
     val sttProvider: SttProvider = SttProvider.DEFAULT,
     val sttModel: String = PreferencesManager.DEFAULT_STT_MODEL,
     val llmModel: String = PreferencesManager.DEFAULT_LLM_MODEL,

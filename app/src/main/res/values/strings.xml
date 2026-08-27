@@ -51,6 +51,14 @@
     <string name="settings_refinement_section">Text Refinement</string>
     <string name="settings_refinement_toggle">Enable refinement</string>
 
+    <!-- Automatic result insertion -->
+    <string name="settings_auto_insert_section">Automatic Result Insertion</string>
+    <string name="settings_auto_insert_toggle">Automatically insert recognized text</string>
+    <string name="settings_auto_insert_off">OFF</string>
+    <string name="settings_auto_insert_on">ON</string>
+    <string name="settings_auto_insert_disabled_desc">Recognition results stay in the candidate bar until you tap one.</string>
+    <string name="settings_auto_insert_enabled_desc">Insert the final recognized or refined text automatically. Text is inserted only; messages are never sent automatically.</string>
+
     <!-- Translation Mode -->
     <string name="settings_translation_section">Translation Mode</string>
     <string name="settings_translation_toggle">Translate output</string>

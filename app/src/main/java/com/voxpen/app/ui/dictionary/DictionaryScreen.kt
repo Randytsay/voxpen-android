@@ -14,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -52,26 +54,61 @@ fun DictionaryScreenContent(
     val count by viewModel.count.collectAsState()
     val isPro by viewModel.isPro.collectAsState()
     val isLimitReached by viewModel.isLimitReached.collectAsState()
+    val importantWords by viewModel.importantWords.collectAsState()
     val showDuplicate by viewModel.showDuplicateToast.collectAsState()
-    var inputText by remember { mutableStateOf("") }
-    var showHelp by remember { mutableStateOf(false) }
+
+    var inputText by remember {
+        mutableStateOf("")
+    }
+
+    var showHelp by remember {
+        mutableStateOf(false)
+    }
+
     val context = LocalContext.current
     val limit = DictionaryViewModel.FREE_DICTIONARY_LIMIT
 
     LaunchedEffect(showDuplicate) {
         if (showDuplicate) {
-            Toast.makeText(context, context.getString(R.string.dictionary_duplicate), Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                context.getString(
+                    R.string.dictionary_duplicate,
+                ),
+                Toast.LENGTH_SHORT,
+            ).show()
+
             viewModel.dismissDuplicateToast()
         }
     }
 
     if (showHelp) {
         AlertDialog(
-            onDismissRequest = { showHelp = false },
-            title = { Text(stringResource(R.string.dictionary_title)) },
-            text = { Text(stringResource(R.string.dictionary_help)) },
+            onDismissRequest = {
+                showHelp = false
+            },
+            title = {
+                Text(
+                    stringResource(
+                        R.string.dictionary_title,
+                    ),
+                )
+            },
+            text = {
+                Text(
+                    "加入常用人名、品牌、專有名詞，可提高語音辨識與 AI 潤稿的準確度。\n\n" +
+                        "點擊 ☆ 可設為 ⭐ 重要詞。\n\n" +
+                        "重要詞會排在一般詞前面，優先提供給語音辨識模型。",
+                )
+            },
             confirmButton = {
-                TextButton(onClick = { showHelp = false }) { Text("OK") }
+                TextButton(
+                    onClick = {
+                        showHelp = false
+                    },
+                ) {
+                    Text("OK")
+                }
             },
         )
     }
@@ -79,15 +116,33 @@ fun DictionaryScreenContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.dictionary_title)) },
+                title = {
+                    Text(
+                        stringResource(
+                            R.string.dictionary_title,
+                        ),
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(
+                        onClick = onNavigateBack,
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                        )
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showHelp = true }) {
-                        Icon(Icons.Default.Info, contentDescription = "Help")
+                    IconButton(
+                        onClick = {
+                            showHelp = true
+                        },
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "說明",
+                        )
                     }
                 },
             )
@@ -101,40 +156,103 @@ fun DictionaryScreenContent(
                     .padding(horizontal = 16.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier =
+                    Modifier.fillMaxWidth(),
+                verticalAlignment =
+                    Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
                     value = inputText,
-                    onValueChange = { inputText = it },
-                    placeholder = { Text(stringResource(R.string.dictionary_add_hint)) },
-                    modifier = Modifier.weight(1f),
-                    enabled = !isLimitReached,
+                    onValueChange = {
+                        inputText = it
+                    },
+                    placeholder = {
+                        Text(
+                            stringResource(
+                                R.string.dictionary_add_hint,
+                            ),
+                        )
+                    },
+                    modifier =
+                        Modifier.weight(1f),
+                    enabled =
+                        !isLimitReached,
                     singleLine = true,
                 )
+
                 Button(
                     onClick = {
-                        viewModel.addWord(inputText)
+                        viewModel.addWord(
+                            inputText,
+                        )
+
                         inputText = ""
                     },
-                    modifier = Modifier.padding(start = 8.dp),
-                    enabled = !isLimitReached && inputText.isNotBlank(),
+                    modifier =
+                        Modifier.padding(
+                            start = 8.dp,
+                        ),
+                    enabled =
+                        !isLimitReached &&
+                            inputText.isNotBlank(),
                 ) {
-                    Text(stringResource(R.string.dictionary_add_button))
+                    Text(
+                        stringResource(
+                            R.string.dictionary_add_button,
+                        ),
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp),
+            )
 
             Text(
                 text =
                     if (isPro) {
-                        stringResource(R.string.dictionary_count_unlimited, count)
+                        stringResource(
+                            R.string.dictionary_count_unlimited,
+                            count,
+                        )
                     } else {
-                        stringResource(R.string.dictionary_count, count, limit)
+                        stringResource(
+                            R.string.dictionary_count,
+                            count,
+                            limit,
+                        )
                     },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style =
+                    MaterialTheme.typography.bodySmall,
+                color =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Text(
+                text =
+                    "⭐ 重要詞：${importantWords.size} 個",
+                style =
+                    MaterialTheme.typography.bodySmall,
+                color =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier =
+                    Modifier.padding(
+                        top = 4.dp,
+                    ),
+            )
+
+            Text(
+                text =
+                    "重要詞會優先用於語音辨識與 AI 潤稿",
+                style =
+                    MaterialTheme.typography.bodySmall,
+                color =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier =
+                    Modifier.padding(
+                        top = 2.dp,
+                    ),
             )
 
             if (isLimitReached) {
@@ -142,49 +260,121 @@ fun DictionaryScreenContent(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
+                            .padding(
+                                vertical = 8.dp,
+                            ),
                     colors =
                         CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            containerColor =
+                                MaterialTheme.colorScheme.primaryContainer,
                         ),
                 ) {
                     Text(
-                        stringResource(R.string.dictionary_upgrade),
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium,
+                        stringResource(
+                            R.string.dictionary_upgrade,
+                        ),
+                        modifier =
+                            Modifier.padding(
+                                16.dp,
+                            ),
+                        style =
+                            MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(
+                modifier =
+                    Modifier.height(8.dp),
+            )
 
             if (entries.isEmpty()) {
                 Text(
-                    stringResource(R.string.dictionary_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 32.dp),
+                    stringResource(
+                        R.string.dictionary_empty,
+                    ),
+                    style =
+                        MaterialTheme.typography.bodyMedium,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier =
+                        Modifier.padding(
+                            vertical = 32.dp,
+                        ),
                 )
             } else {
                 LazyColumn {
-                    items(entries, key = { it.id }) { entry ->
+                    items(
+                        items = entries,
+                        key = {
+                            it.id
+                        },
+                    ) { entry ->
+                        val isImportant =
+                            entry.word in importantWords
+
                         Row(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                    .padding(
+                                        vertical = 4.dp,
+                                    ),
+                            verticalAlignment =
+                                Alignment.CenterVertically,
                         ) {
                             Text(
-                                entry.word,
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyLarge,
+                                text =
+                                    entry.word,
+                                modifier =
+                                    Modifier.weight(1f),
+                                style =
+                                    MaterialTheme.typography.bodyLarge,
                             )
-                            IconButton(onClick = { viewModel.removeWord(entry) }) {
+
+                            IconButton(
+                                onClick = {
+                                    viewModel
+                                        .toggleImportantWord(
+                                            entry.word,
+                                        )
+                                },
+                            ) {
+                                Icon(
+                                    imageVector =
+                                        if (isImportant) {
+                                            Icons.Filled.Star
+                                        } else {
+                                            Icons.Outlined.Star
+                                        },
+                                    contentDescription =
+                                        if (isImportant) {
+                                            "取消重要詞"
+                                        } else {
+                                            "設為重要詞"
+                                        },
+                                    tint =
+                                        if (isImportant) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    viewModel.removeWord(
+                                        entry,
+                                    )
+                                },
+                            ) {
                                 Icon(
                                     Icons.Default.Close,
-                                    contentDescription = "Remove",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    contentDescription =
+                                        "刪除",
+                                    tint =
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }

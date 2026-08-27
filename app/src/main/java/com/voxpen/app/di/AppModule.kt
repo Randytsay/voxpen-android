@@ -8,6 +8,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
+import com.voxpen.app.BuildConfig
 import com.voxpen.app.billing.BillingManager
 import com.voxpen.app.billing.LicenseManager
 import com.voxpen.app.billing.ProStatusResolver
@@ -26,7 +27,10 @@ import kotlinx.coroutines.SupervisorJob
 import javax.inject.Named
 import javax.inject.Singleton
 
-private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+private val Context.settingsDataStore: DataStore<Preferences> by
+preferencesDataStore(
+    name = "settings",
+)
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -35,14 +39,19 @@ object AppModule {
     @Singleton
     fun provideSettingsDataStore(
         @ApplicationContext context: Context,
-    ): DataStore<Preferences> = context.settingsDataStore
+    ): DataStore<Preferences> =
+        context.settingsDataStore
 
     @Provides
     @Singleton
     fun provideEncryptedSharedPreferences(
         @ApplicationContext context: Context,
     ): SharedPreferences {
-        val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+        val masterKeyAlias =
+            MasterKeys.getOrCreate(
+                MasterKeys.AES256_GCM_SPEC,
+            )
+
         return EncryptedSharedPreferences.create(
             "voxpen_secure_prefs",
             masterKeyAlias,
@@ -58,15 +67,29 @@ object AppModule {
         @ApplicationContext context: Context,
     ): AppDatabase =
         Room
-            .databaseBuilder(context, AppDatabase::class.java, "voxpen.db")
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+            .databaseBuilder(
+                context,
+                AppDatabase::class.java,
+                "voxpen.db",
+            )
+            .addMigrations(
+                AppDatabase.MIGRATION_1_2,
+                AppDatabase.MIGRATION_2_3,
+                AppDatabase.MIGRATION_3_4,
+            )
             .build()
 
     @Provides
-    fun provideTranscriptionDao(database: AppDatabase): TranscriptionDao = database.transcriptionDao()
+    fun provideTranscriptionDao(
+        database: AppDatabase,
+    ): TranscriptionDao =
+        database.transcriptionDao()
 
     @Provides
-    fun provideDictionaryDao(database: AppDatabase): DictionaryDao = database.dictionaryDao()
+    fun provideDictionaryDao(
+        database: AppDatabase,
+    ): DictionaryDao =
+        database.dictionaryDao()
 
     @Provides
     @Singleton
@@ -74,17 +97,20 @@ object AppModule {
     fun provideLicenseInstanceName(
         @ApplicationContext context: Context,
     ): String {
-        val androidId = android.provider.Settings.Secure.getString(
-            context.contentResolver,
-            android.provider.Settings.Secure.ANDROID_ID,
-        )
+        val androidId =
+            android.provider.Settings.Secure.getString(
+                context.contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID,
+            )
+
         return "android-$androidId"
     }
 
     @Provides
     @Singleton
     @Named("ioDispatcher")
-    fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
+    fun provideIoDispatcher(): CoroutineDispatcher =
+        Dispatchers.IO
 
     @Provides
     @Singleton
@@ -92,11 +118,35 @@ object AppModule {
         billingManager: BillingManager,
         licenseManager: LicenseManager,
     ): ProStatusResolver {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val scope =
+            CoroutineScope(
+                SupervisorJob() +
+                    Dispatchers.Main.immediate,
+            )
+
         return ProStatusResolver(
-            billingStatusFlow = billingManager.proStatus,
-            licenseStatusFlow = licenseManager.proStatus,
+            billingStatusFlow =
+                billingManager.proStatus,
+            licenseStatusFlow =
+                licenseManager.proStatus,
             scope = scope,
+
+            /*
+             * Personal Build
+             *
+             * Debug APK：
+             * personalBuild = true
+             *
+             * Release APK：
+             * personalBuild = false
+             *
+             * 因此自己的 Debug 版本直接取得
+             * PERSONAL Pro 狀態，
+             * 正式 Release 還是維持原本
+             * Google Play / License 邏輯。
+             */
+            personalBuild =
+                BuildConfig.DEBUG,
         )
     }
 }

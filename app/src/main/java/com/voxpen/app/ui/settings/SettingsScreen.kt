@@ -127,6 +127,8 @@ fun SettingsScreenContent(
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             RecordingModeSection(state, viewModel)
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            AutoInsertResultSection(state, viewModel)
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             RefinementSection(state, viewModel)
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             TranslationSection(state, viewModel)
@@ -442,6 +444,54 @@ private fun RefinementSection(
         Switch(
             checked = state.refinementEnabled,
             onCheckedChange = { viewModel.setRefinementEnabled(it) },
+        )
+    }
+}
+
+@Composable
+private fun AutoInsertResultSection(
+    state: SettingsUiState,
+    viewModel: SettingsViewModel,
+) {
+    SectionHeader(stringResource(R.string.settings_auto_insert_section))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(stringResource(R.string.settings_auto_insert_toggle))
+            Text(
+                text =
+                    stringResource(
+                        if (state.autoInsertResult) {
+                            R.string.settings_auto_insert_enabled_desc
+                        } else {
+                            R.string.settings_auto_insert_disabled_desc
+                        },
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        Text(
+            text =
+                stringResource(
+                    if (state.autoInsertResult) {
+                        R.string.settings_auto_insert_on
+                    } else {
+                        R.string.settings_auto_insert_off
+                    },
+                ),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        Switch(
+            checked = state.autoInsertResult,
+            onCheckedChange = { viewModel.setAutoInsertResult(it) },
         )
     }
 }

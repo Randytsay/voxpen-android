@@ -39,46 +39,137 @@ class RecordingController(
     private val ioDispatcher: CoroutineDispatcher,
     private val messages: RecordingMessages = RecordingMessages.English,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-    private var refinementEnabled: Boolean = PreferencesManager.DEFAULT_REFINEMENT_ENABLED
-    private var sttModel: String = PreferencesManager.DEFAULT_STT_MODEL
-    private var sttProvider: SttProvider = SttProvider.DEFAULT
-    private var llmModel: String = PreferencesManager.DEFAULT_LLM_MODEL
-    private var toneStyle: ToneStyle = ToneStyle.DEFAULT
-    private var llmProvider: LlmProvider = LlmProvider.DEFAULT
-    private var customLlmModel: String = ""
-    private var customSttBaseUrl: String = ""
-    private var translationEnabled: Boolean = PreferencesManager.DEFAULT_TRANSLATION_ENABLED
-    private var translationTargetLanguage: SttLanguage = PreferencesManager.DEFAULT_TRANSLATION_TARGET_LANGUAGE
+    private val scope =
+        CoroutineScope(
+            SupervisorJob() + ioDispatcher,
+        )
+
+    private var refinementEnabled: Boolean =
+        PreferencesManager.DEFAULT_REFINEMENT_ENABLED
+
+    private var sttModel: String =
+        PreferencesManager.DEFAULT_STT_MODEL
+
+    private var sttProvider: SttProvider =
+        SttProvider.DEFAULT
+
+    private var llmModel: String =
+        PreferencesManager.DEFAULT_LLM_MODEL
+
+    private var toneStyle: ToneStyle =
+        ToneStyle.DEFAULT
+
+    private var llmProvider: LlmProvider =
+        LlmProvider.DEFAULT
+
+    private var customLlmModel: String =
+        ""
+
+    private var customSttBaseUrl: String =
+        ""
+
+    private var translationEnabled: Boolean =
+        PreferencesManager.DEFAULT_TRANSLATION_ENABLED
+
+    private var translationTargetLanguage: SttLanguage =
+        PreferencesManager.DEFAULT_TRANSLATION_TARGET_LANGUAGE
 
     init {
         scope.launch {
-            preferencesManager.refinementEnabledFlow.collect { refinementEnabled = it }
+            preferencesManager.refinementEnabledFlow.collect {
+                refinementEnabled = it
+            }
         }
-        scope.launch { preferencesManager.sttModelFlow.collect { sttModel = it } }
-        scope.launch { preferencesManager.sttProviderFlow.collect { sttProvider = it } }
-        scope.launch { preferencesManager.llmModelFlow.collect { llmModel = it } }
-        scope.launch { preferencesManager.toneStyleFlow.collect { toneStyle = it } }
-        scope.launch { preferencesManager.llmProviderFlow.collect { llmProvider = it } }
-        scope.launch { preferencesManager.customLlmModelFlow.collect { customLlmModel = it } }
-        scope.launch { preferencesManager.customSttBaseUrlFlow.collect { customSttBaseUrl = it } }
-        scope.launch { preferencesManager.translationEnabledFlow.collect { translationEnabled = it } }
-        scope.launch { preferencesManager.translationTargetLanguageFlow.collect { translationTargetLanguage = it } }
+
+        scope.launch {
+            preferencesManager.sttModelFlow.collect {
+                sttModel = it
+            }
+        }
+
+        scope.launch {
+            preferencesManager.sttProviderFlow.collect {
+                sttProvider = it
+            }
+        }
+
+        scope.launch {
+            preferencesManager.llmModelFlow.collect {
+                llmModel = it
+            }
+        }
+
+        scope.launch {
+            preferencesManager.toneStyleFlow.collect {
+                toneStyle = it
+            }
+        }
+
+        scope.launch {
+            preferencesManager.llmProviderFlow.collect {
+                llmProvider = it
+            }
+        }
+
+        scope.launch {
+            preferencesManager.customLlmModelFlow.collect {
+                customLlmModel = it
+            }
+        }
+
+        scope.launch {
+            preferencesManager.customSttBaseUrlFlow.collect {
+                customSttBaseUrl = it
+            }
+        }
+
+        scope.launch {
+            preferencesManager.translationEnabledFlow.collect {
+                translationEnabled = it
+            }
+        }
+
+        scope.launch {
+            preferencesManager.translationTargetLanguageFlow.collect {
+                translationTargetLanguage = it
+            }
+        }
     }
 
-    private val _uiState = MutableStateFlow<ImeUiState>(ImeUiState.Idle)
-    val uiState: StateFlow<ImeUiState> = _uiState.asStateFlow()
+    private val _uiState =
+        MutableStateFlow<ImeUiState>(
+            ImeUiState.Idle,
+        )
 
-    fun onStartRecording(startRecording: () -> Unit) {
-        val proStatus = proStatusProvider()
-        if (!proStatus.isPro && !usageLimiter.canUseVoiceInput()) {
-            val remaining = usageLimiter.remainingVoiceInputs()
+    val uiState: StateFlow<ImeUiState> =
+        _uiState.asStateFlow()
+
+    fun onStartRecording(
+        startRecording: () -> Unit,
+    ) {
+        val proStatus =
+            proStatusProvider()
+
+        if (
+            !proStatus.isPro &&
+            !usageLimiter.canUseVoiceInput()
+        ) {
+            val remaining =
+                usageLimiter.remainingVoiceInputs()
+
             _uiState.value =
-                ImeUiState.Error("Daily limit reached ($remaining remaining). Upgrade to Pro for unlimited use.")
+                ImeUiState.Error(
+                    "Daily limit reached ($remaining remaining). " +
+                        "Upgrade to Pro for unlimited use.",
+                )
+
             return
         }
+
         startRecording()
-        _uiState.value = ImeUiState.Recording
+
+        _uiState.value =
+            ImeUiState.Recording
     }
 
     fun onStopRecording(
@@ -87,41 +178,120 @@ class RecordingController(
         editMode: Boolean = false,
         toneOverride: ToneStyle? = null,
     ) {
-        val pcmData = stopRecording()
+        val pcmData =
+            stopRecording()
 
-        when (RecordingValidator.validate(pcmData)) {
+        when (
+            RecordingValidator.validate(
+                pcmData,
+            )
+        ) {
             RecordingValidator.Result.TooShort -> {
-                _uiState.value = ImeUiState.Error(messages.recordingTooShort())
+                _uiState.value =
+                    ImeUiState.Error(
+                        messages.recordingTooShort(),
+                    )
+
                 return
             }
+
             RecordingValidator.Result.Silent -> {
-                _uiState.value = ImeUiState.Error(messages.recordingTooQuiet())
+                _uiState.value =
+                    ImeUiState.Error(
+                        messages.recordingTooQuiet(),
+                    )
+
                 return
             }
-            RecordingValidator.Result.Valid -> Unit
+
+            RecordingValidator.Result.Valid ->
+                Unit
         }
 
-        val currentSttProvider = sttProvider
-        val apiKey = apiKeyManager.getSttApiKey(currentSttProvider)
+        val currentSttProvider =
+            sttProvider
 
-        if (apiKey.isNullOrBlank() && currentSttProvider != SttProvider.Custom) {
-            _uiState.value = ImeUiState.Error(messages.apiKeyNotConfigured())
+        val apiKey =
+            apiKeyManager.getSttApiKey(
+                currentSttProvider,
+            )
+
+        if (
+            apiKey.isNullOrBlank() &&
+            currentSttProvider != SttProvider.Custom
+        ) {
+            _uiState.value =
+                ImeUiState.Error(
+                    messages.apiKeyNotConfigured(),
+                )
+
             return
         }
 
-        val effectiveTone = toneOverride ?: toneStyle
+        val effectiveTone =
+            toneOverride ?: toneStyle
 
-        _uiState.value = ImeUiState.Processing
+        _uiState.value =
+            ImeUiState.Processing
+
         scope.launch {
-            val proStatus = proStatusProvider()
-            val vocabulary = dictionaryRepository.getWords(80)
+            val proStatus =
+                proStatusProvider()
+
+            /*
+             * ------------------------------------------------
+             * 自訂詞庫
+             * ------------------------------------------------
+             *
+             * 重要詞：
+             * 使用者在 App 詞庫畫面自行以 ⭐ 標記。
+             *
+             * 一般詞：
+             * 取最近加入的 500 個。
+             *
+             * 排序方式：
+             *
+             * 重要詞
+             * ↓
+             * 最近 500 個一般詞
+             * ↓
+             * 去除重複
+             *
+             * VocabularyPromptBuilder 仍會依
+             * Whisper token budget 決定實際送出的數量。
+             */
+
+            val importantVocabulary =
+                preferencesManager
+                    .importantWordsFlow
+                    .first()
+                    .sorted()
+
+            val recentVocabulary =
+                dictionaryRepository
+                    .getWords(500)
+
+            val vocabulary =
+                (
+                    importantVocabulary +
+                        recentVocabulary
+                    ).distinct()
+
             val whisperPrompt =
                 if (vocabulary.isNotEmpty()) {
-                    VocabularyPromptBuilder.buildWhisperPrompt(language, vocabulary)
+                    VocabularyPromptBuilder
+                        .buildWhisperPrompt(
+                            language,
+                            vocabulary,
+                        )
                 } else {
                     null
                 }
-            val sttBaseUrl = customSttBaseUrl.ifBlank { null }
+
+            val sttBaseUrl =
+                customSttBaseUrl
+                    .ifBlank { null }
+
             val result =
                 transcribeUseCase(
                     pcmData = pcmData,
@@ -132,50 +302,131 @@ class RecordingController(
                     provider = currentSttProvider,
                     customSttBaseUrl = sttBaseUrl,
                 )
+
             result.fold(
                 onSuccess = { originalText ->
                     if (!proStatus.isPro) {
-                        usageLimiter.incrementVoiceInput()
+                        usageLimiter
+                            .incrementVoiceInput()
                     }
 
-                    // Speak-to-Edit: emit instruction for VoxPenIME to handle
+                    /*
+                     * Speak-to-Edit
+                     */
                     if (editMode) {
-                        _uiState.value = ImeUiState.EditInstruction(originalText)
+                        _uiState.value =
+                            ImeUiState.EditInstruction(
+                                originalText,
+                            )
+
                         return@launch
                     }
 
-                    // Voice command check — executes keyboard action instead of inserting text
-                    val command = VoiceCommandRecognizer.recognize(originalText)
+                    /*
+                     * Voice command
+                     *
+                     * 如果辨識結果為鍵盤語音指令，
+                     * 執行動作而不是插入文字。
+                     */
+                    val command =
+                        VoiceCommandRecognizer
+                            .recognize(
+                                originalText,
+                            )
+
                     if (command != null) {
-                        _uiState.value = ImeUiState.CommandDetected(command)
+                        _uiState.value =
+                            ImeUiState.CommandDetected(
+                                command,
+                            )
+
                         return@launch
                     }
 
-                    val shouldRefine = refinementEnabled && canUseRefinement(proStatus)
+                    val shouldRefine =
+                        refinementEnabled &&
+                            canUseRefinement(
+                                proStatus,
+                            )
+
                     if (!shouldRefine) {
-                        _uiState.value = ImeUiState.Result(originalText)
+                        _uiState.value =
+                            ImeUiState.Result(
+                                originalText,
+                            )
+
                         return@launch
                     }
-                    _uiState.value = ImeUiState.Refining(originalText)
+
+                    _uiState.value =
+                        ImeUiState.Refining(
+                            originalText,
+                        )
+
                     if (!proStatus.isPro) {
-                        usageLimiter.incrementRefinement()
+                        usageLimiter
+                            .incrementRefinement()
                     }
-                    val allVocabulary = dictionaryRepository.getWords(500)
-                    val langKey = PreferencesManager.languageToKey(language)
-                    val customPrompt = preferencesManager.customPromptFlow(langKey).first()
+
+                    /*
+                     * LLM 潤稿詞庫
+                     *
+                     * 使用與 STT 相同的：
+                     *
+                     * ⭐ 重要詞
+                     * +
+                     * 最近 500 個詞
+                     *
+                     * 所以重要詞不只影響 Whisper，
+                     * 也會提供給後續 AI 潤稿。
+                     */
+                    val allVocabulary =
+                        vocabulary
+
+                    val langKey =
+                        PreferencesManager
+                            .languageToKey(
+                                language,
+                            )
+
+                    val customPrompt =
+                        preferencesManager
+                            .customPromptFlow(
+                                langKey,
+                            )
+                            .first()
+
                     val resolvedModel =
-                        if (llmProvider == LlmProvider.Custom) {
-                            customLlmModel.ifBlank { llmModel }
+                        if (
+                            llmProvider ==
+                            LlmProvider.Custom
+                        ) {
+                            customLlmModel
+                                .ifBlank {
+                                    llmModel
+                                }
                         } else {
                             llmModel
                         }
+
                     val customBaseUrl =
-                        if (llmProvider == LlmProvider.Custom) {
-                            apiKeyManager.getCustomBaseUrl()
+                        if (
+                            llmProvider ==
+                            LlmProvider.Custom
+                        ) {
+                            apiKeyManager
+                                .getCustomBaseUrl()
                         } else {
                             null
                         }
-                    val llmApiKey = apiKeyManager.getApiKey(llmProvider).orEmpty()
+
+                    val llmApiKey =
+                        apiKeyManager
+                            .getApiKey(
+                                llmProvider,
+                            )
+                            .orEmpty()
+
                     val refinedResult =
                         refineTextUseCase(
                             originalText,
@@ -190,35 +441,78 @@ class RecordingController(
                             translationEnabled,
                             translationTargetLanguage,
                         )
+
                     _uiState.value =
                         refinedResult.fold(
-                            onSuccess = { ImeUiState.Refined(originalText, it) },
-                            onFailure = { ImeUiState.Result(originalText) },
+                            onSuccess = {
+                                ImeUiState.Refined(
+                                    originalText,
+                                    it,
+                                )
+                            },
+                            onFailure = {
+                                /*
+                                 * 潤稿失敗時仍保留
+                                 * Whisper 原始辨識文字。
+                                 */
+                                ImeUiState.Result(
+                                    originalText,
+                                )
+                            },
                         )
                 },
+
                 onFailure = {
-                    val message = messages.transcriptionFailed(it.message)
+                    val message =
+                        messages
+                            .transcriptionFailed(
+                                it.message,
+                            )
+
+                    /*
+                     * STT 失敗時保留錄音，
+                     * 供後續 Retry 使用。
+                     */
                     runCatching {
-                        val audioPath = recordingStore.saveLiveRecording(pcmData)
-                        transcriptionRepository.insertFailedLive(
-                            audioPath = audioPath,
-                            provider = currentSttProvider,
-                            language = language,
-                            errorMessage = message,
-                        )
+                        val audioPath =
+                            recordingStore
+                                .saveLiveRecording(
+                                    pcmData,
+                                )
+
+                        transcriptionRepository
+                            .insertFailedLive(
+                                audioPath = audioPath,
+                                provider = currentSttProvider,
+                                language = language,
+                                errorMessage = message,
+                            )
                     }.onFailure { saveError ->
-                        Timber.w(saveError, "failed_recording_save_failed provider=%s", currentSttProvider.key)
+                        Timber.w(
+                            saveError,
+                            "failed_recording_save_failed provider=%s",
+                            currentSttProvider.key,
+                        )
                     }
-                    _uiState.value = ImeUiState.Error(message)
+
+                    _uiState.value =
+                        ImeUiState.Error(
+                            message,
+                        )
                 },
             )
         }
     }
 
-    private fun canUseRefinement(proStatus: ProStatus): Boolean = proStatus.isPro || usageLimiter.canUseRefinement()
+    private fun canUseRefinement(
+        proStatus: ProStatus,
+    ): Boolean =
+        proStatus.isPro ||
+            usageLimiter.canUseRefinement()
 
     fun dismiss() {
-        _uiState.value = ImeUiState.Idle
+        _uiState.value =
+            ImeUiState.Idle
     }
 
     fun destroy() {

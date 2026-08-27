@@ -71,6 +71,7 @@ class VoxPenIME : InputMethodService() {
     @Volatile private var translationEnabled: Boolean = PreferencesManager.DEFAULT_TRANSLATION_ENABLED
     @Volatile private var translationTargetLanguage: SttLanguage = PreferencesManager.DEFAULT_TRANSLATION_TARGET_LANGUAGE
     @Volatile private var currentSttLanguage: SttLanguage = SttLanguage.Auto
+    @Volatile private var autoInsertResult: Boolean = PreferencesManager.DEFAULT_AUTO_INSERT_RESULT
 
     // Audio focus for ducking other apps during recording
     private var audioManager: AudioManager? = null
@@ -189,6 +190,11 @@ class VoxPenIME : InputMethodService() {
             preferencesManager.languageFlow.collect { lang ->
                 currentSttLanguage = lang
                 updateTranslationIndicator()
+            }
+        }
+        serviceScope.launch {
+            preferencesManager.autoInsertResultFlow.collect { enabled ->
+                autoInsertResult = enabled
             }
         }
         Timber.d("VoxPenIME input view created")
@@ -460,11 +466,11 @@ class VoxPenIME : InputMethodService() {
                 timerHandler.removeCallbacks(timerRunnable)
                 showStatusRow(state.text, showProgress = false)
                 candidateBar?.setOnClickListener {
-                    currentInputConnection?.commitText(state.text, 1)
-                    recordingController.dismiss()
+                    commitCandidateText(state.text)
                 }
                 copyStatusButton?.visibility = View.VISIBLE
                 copyStatusButton?.setOnClickListener { copyToClipboard(state.text) }
+                maybeAutoInsert(state)
             }
             is ImeUiState.Refining -> {
                 timerHandler.removeCallbacks(timerRunnable)
@@ -474,15 +480,14 @@ class VoxPenIME : InputMethodService() {
                 timerHandler.removeCallbacks(timerRunnable)
                 showDualRows(state.original, state.refined)
                 candidateOriginal?.setOnClickListener {
-                    currentInputConnection?.commitText(state.original, 1)
-                    recordingController.dismiss()
+                    commitCandidateText(state.original)
                 }
                 candidateRefinedRow?.setOnClickListener {
-                    currentInputConnection?.commitText(state.refined, 1)
-                    recordingController.dismiss()
+                    commitCandidateText(state.refined)
                 }
                 copyRefinedButton?.visibility = View.VISIBLE
                 copyRefinedButton?.setOnClickListener { copyToClipboard(state.refined) }
+                maybeAutoInsert(state)
             }
             is ImeUiState.Error -> {
                 timerHandler.removeCallbacks(timerRunnable)
@@ -509,6 +514,21 @@ class VoxPenIME : InputMethodService() {
                 recordingController.dismiss()
             }
         }
+    }
+
+    private fun maybeAutoInsert(state: ImeUiState) {
+        val text = ImeResultCommitPolicy.textToCommit(state, autoInsertResult) ?: return
+        commitCandidateText(text)
+    }
+
+    /** Commits candidate text without losing it when the current editor is unavailable. */
+    private fun commitCandidateText(text: String): Boolean {
+        val connection = currentInputConnection ?: return false
+        val committed = runCatching { connection.commitText(text, 1) }.getOrDefault(false)
+        if (committed) {
+            recordingController.dismiss()
+        }
+        return committed
     }
 
     private fun updateMicAppearance(state: ImeUiState) {

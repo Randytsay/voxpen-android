@@ -51,6 +51,14 @@
     <string name="settings_refinement_section">文字潤稿</string>
     <string name="settings_refinement_toggle">啟用智慧潤稿</string>
 
+    <!-- 自動插入辨識結果 -->
+    <string name="settings_auto_insert_section">辨識結果自動插入</string>
+    <string name="settings_auto_insert_toggle">自動插入辨識文字</string>
+    <string name="settings_auto_insert_off">關閉</string>
+    <string name="settings_auto_insert_on">開啟</string>
+    <string name="settings_auto_insert_disabled_desc">關閉：辨識完成後顯示候選文字，點擊後才放入輸入框。</string>
+    <string name="settings_auto_insert_enabled_desc">開啟：辨識與 AI 潤稿完成後，自動將最終文字放入輸入框。只會插入文字，不會自動送出。</string>
+
     <!-- Translation Mode -->
     <string name="settings_translation_section">翻譯模式</string>
     <string name="settings_translation_toggle">翻譯輸出</string>

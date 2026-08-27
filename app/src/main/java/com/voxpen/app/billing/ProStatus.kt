@@ -3,6 +3,7 @@ package com.voxpen.app.billing
 enum class ProSource {
     GOOGLE_PLAY,
     LICENSE_KEY,
+    PERSONAL,
 }
 
 sealed interface ProStatus {

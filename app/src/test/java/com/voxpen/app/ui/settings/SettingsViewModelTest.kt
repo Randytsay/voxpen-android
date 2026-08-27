@@ -51,15 +51,18 @@ class SettingsViewModelTest {
     private val chatCompletionApi: ChatCompletionApi = mockk()
     private val testDispatcher = UnconfinedTestDispatcher()
     private val proStatusFlow = MutableStateFlow<ProStatus>(ProStatus.Free)
+    private val autoInsertResultFlow = MutableStateFlow(false)
 
     @BeforeEach
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        autoInsertResultFlow.value = PreferencesManager.DEFAULT_AUTO_INSERT_RESULT
         every { apiKeyManager.isGroqKeyConfigured() } returns false
         every { apiKeyManager.getGroqApiKey() } returns null
         every { preferencesManager.languageFlow } returns flowOf(SttLanguage.Auto)
         every { preferencesManager.recordingModeFlow } returns flowOf(RecordingMode.TAP_TO_TOGGLE)
         every { preferencesManager.refinementEnabledFlow } returns flowOf(true)
+        every { preferencesManager.autoInsertResultFlow } returns autoInsertResultFlow
         every { preferencesManager.llmProviderFlow } returns flowOf(LlmProvider.Groq)
         every { preferencesManager.customLlmModelFlow } returns flowOf("")
         every { proStatusResolver.proStatus } returns proStatusFlow
@@ -93,6 +96,8 @@ class SettingsViewModelTest {
                 assertThat(state.isApiKeyConfigured).isFalse()
                 assertThat(state.language).isEqualTo(SttLanguage.Auto)
                 assertThat(state.recordingMode).isEqualTo(RecordingMode.TAP_TO_TOGGLE)
+                assertThat(PreferencesManager.DEFAULT_AUTO_INSERT_RESULT).isFalse()
+                assertThat(state.autoInsertResult).isFalse()
                 assertThat(state.proStatus).isEqualTo(ProStatus.Free)
                 assertThat(state.remainingVoiceInputs).isEqualTo(UsageLimiter.FREE_VOICE_INPUT_LIMIT)
             }
@@ -126,6 +131,28 @@ class SettingsViewModelTest {
             val vm = createViewModel()
             vm.setRecordingMode(RecordingMode.HOLD_TO_RECORD)
             coVerify { preferencesManager.setRecordingMode(RecordingMode.HOLD_TO_RECORD) }
+        }
+
+    @Test
+    fun `should reflect auto insert result preference`() =
+        runTest {
+            val vm = createViewModel()
+
+            vm.uiState.test {
+                assertThat(awaitItem().autoInsertResult).isFalse()
+                autoInsertResultFlow.value = true
+                assertThat(awaitItem().autoInsertResult).isTrue()
+            }
+        }
+
+    @Test
+    fun `should delegate setAutoInsertResult to preferencesManager`() =
+        runTest {
+            val vm = createViewModel()
+
+            vm.setAutoInsertResult(true)
+
+            coVerify { preferencesManager.setAutoInsertResult(true) }
         }
 
     @Test

@@ -10,18 +10,45 @@ import javax.inject.Singleton
 
 @Singleton
 class ProStatusResolver
-    @Inject
-    constructor(
-        billingStatusFlow: StateFlow<ProStatus>,
-        licenseStatusFlow: StateFlow<ProStatus>,
-        scope: CoroutineScope,
-    ) {
-        val proStatus: StateFlow<ProStatus> =
-            combine(billingStatusFlow, licenseStatusFlow) { billing, license ->
-                when {
-                    billing.isPro -> billing
-                    license.isPro -> license
-                    else -> ProStatus.Free
-                }
-            }.stateIn(scope, SharingStarted.Eagerly, ProStatus.Free)
-    }
+@Inject
+constructor(
+    billingStatusFlow: StateFlow<ProStatus>,
+    licenseStatusFlow: StateFlow<ProStatus>,
+    scope: CoroutineScope,
+    private val personalBuild: Boolean = false,
+) {
+    private val initialStatus: ProStatus =
+        if (personalBuild) {
+            ProStatus.Pro(
+                ProSource.PERSONAL,
+            )
+        } else {
+            ProStatus.Free
+        }
+
+    val proStatus: StateFlow<ProStatus> =
+        combine(
+            billingStatusFlow,
+            licenseStatusFlow,
+        ) { billing, license ->
+            when {
+                personalBuild ->
+                    ProStatus.Pro(
+                        ProSource.PERSONAL,
+                    )
+
+                billing.isPro ->
+                    billing
+
+                license.isPro ->
+                    license
+
+                else ->
+                    ProStatus.Free
+            }
+        }.stateIn(
+            scope = scope,
+            started = SharingStarted.Eagerly,
+            initialValue = initialStatus,
+        )
+}

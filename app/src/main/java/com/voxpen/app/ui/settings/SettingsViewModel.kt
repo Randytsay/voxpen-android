@@ -75,6 +75,11 @@ class SettingsViewModel
                 }
             }
             viewModelScope.launch {
+                preferencesManager.autoInsertResultFlow.collect { enabled ->
+                    _uiState.update { it.copy(autoInsertResult = enabled) }
+                }
+            }
+            viewModelScope.launch {
                 preferencesManager.sttModelFlow.collect { model ->
                     _uiState.update { it.copy(sttModel = model) }
                 }
@@ -156,6 +161,10 @@ class SettingsViewModel
 
         fun setRefinementEnabled(enabled: Boolean) {
             viewModelScope.launch { preferencesManager.setRefinementEnabled(enabled) }
+        }
+
+        fun setAutoInsertResult(enabled: Boolean) {
+            viewModelScope.launch { preferencesManager.setAutoInsertResult(enabled) }
         }
 
         fun setSttModel(model: String) {
