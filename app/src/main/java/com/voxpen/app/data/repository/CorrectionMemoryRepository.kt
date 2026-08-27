@@ -128,12 +128,10 @@ class CorrectionMemoryRepository
             id: Long,
             level: CorrectionManualLevel,
         ) {
-            val entity = dao.getById(id) ?: return
-            dao.update(
-                entity.copy(
-                    manualLevel = level.name,
-                    enabled = level != CorrectionManualLevel.DISABLED,
-                ),
+            dao.setManualLevel(
+                id = id,
+                manualLevel = level.name,
+                enabled = level != CorrectionManualLevel.DISABLED,
             )
         }
 
@@ -143,7 +141,8 @@ class CorrectionMemoryRepository
             packageName: String,
         ): Boolean {
             val entity = dao.getById(id) ?: return false
-            val scopedPackage = if (scope == CorrectionScope.APP) packageName.trim() else ""
+            val scopedPackage =
+                if (scope == CorrectionScope.APP) packageName.trim() else ""
             if (scope == CorrectionScope.APP && scopedPackage.isBlank()) return false
 
             val duplicate =
@@ -155,11 +154,10 @@ class CorrectionMemoryRepository
                 )
             if (duplicate != null && duplicate.id != entity.id) return false
 
-            dao.update(
-                entity.copy(
-                    scope = scope.name,
-                    packageName = scopedPackage,
-                ),
+            dao.setScopeFields(
+                id = id,
+                scope = scope.name,
+                packageName = scopedPackage,
             )
             return true
         }
@@ -205,7 +203,12 @@ class CorrectionMemoryRepository
             val appliedIds = mutableListOf<Long>()
             candidates.forEach { prepared ->
                 if (!shouldDirectlyApply(prepared)) return@forEach
-                val replaced = replaceTerm(correctedText, prepared.entity.wrongText, prepared.entity.correctText)
+                val replaced =
+                    replaceTerm(
+                        correctedText,
+                        prepared.entity.wrongText,
+                        prepared.entity.correctText,
+                    )
                 if (replaced != correctedText) {
                     correctedText = replaced
                     appliedIds += prepared.entity.id
@@ -242,8 +245,12 @@ class CorrectionMemoryRepository
             val correct = normalize(entity.correctText)
             if (!isUsablePair(wrong, correct)) return
 
-            val scope = runCatching { CorrectionScope.valueOf(entity.scope) }.getOrDefault(CorrectionScope.GLOBAL)
-            val packageName = if (scope == CorrectionScope.APP) entity.packageName.trim() else ""
+            val scope =
+                runCatching {
+                    CorrectionScope.valueOf(entity.scope)
+                }.getOrDefault(CorrectionScope.GLOBAL)
+            val packageName =
+                if (scope == CorrectionScope.APP) entity.packageName.trim() else ""
             if (scope == CorrectionScope.APP && packageName.isBlank()) return
 
             val level = entity.manualLevelOrDefault()
@@ -271,7 +278,11 @@ class CorrectionMemoryRepository
                         autoConfidence = maxOf(existing.autoConfidence, normalized.autoConfidence),
                         createdAt = minOf(existing.createdAt, normalized.createdAt),
                         lastCorrectedAt = maxOf(existing.lastCorrectedAt, normalized.lastCorrectedAt),
-                        lastAppliedAt = listOfNotNull(existing.lastAppliedAt, normalized.lastAppliedAt).maxOrNull(),
+                        lastAppliedAt =
+                            listOfNotNull(
+                                existing.lastAppliedAt,
+                                normalized.lastAppliedAt,
+                            ).maxOrNull(),
                     ),
                 )
             }
