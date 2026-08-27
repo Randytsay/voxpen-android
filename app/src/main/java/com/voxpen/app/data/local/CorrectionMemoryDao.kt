@@ -53,6 +53,34 @@ interface CorrectionMemoryDao {
     @Update
     suspend fun update(entity: CorrectionMemoryEntity)
 
+    @Query(
+        """
+        UPDATE correction_memory
+        SET manualLevel = :manualLevel,
+            enabled = :enabled
+        WHERE id = :id
+        """,
+    )
+    suspend fun setManualLevel(
+        id: Long,
+        manualLevel: String,
+        enabled: Boolean,
+    )
+
+    @Query(
+        """
+        UPDATE correction_memory
+        SET scope = :scope,
+            packageName = :packageName
+        WHERE id = :id
+        """,
+    )
+    suspend fun setScopeFields(
+        id: Long,
+        scope: String,
+        packageName: String,
+    )
+
     @Delete
     suspend fun delete(entity: CorrectionMemoryEntity)
 
