@@ -36,6 +36,26 @@ class ImeResultCommitPolicyTest {
     }
 
     @Test
+    fun `blank Result is not auto inserted`() {
+        assertThat(
+            ImeResultCommitPolicy.textToCommit(
+                ImeUiState.Result("   "),
+                autoInsertEnabled = true,
+            ),
+        ).isNull()
+    }
+
+    @Test
+    fun `blank Refined result is not auto inserted`() {
+        assertThat(
+            ImeResultCommitPolicy.textToCommit(
+                ImeUiState.Refined("original", "\n\t"),
+                autoInsertEnabled = true,
+            ),
+        ).isNull()
+    }
+
+    @Test
     fun `Refining does not auto insert original text`() {
         assertThat(
             ImeResultCommitPolicy.textToCommit(
