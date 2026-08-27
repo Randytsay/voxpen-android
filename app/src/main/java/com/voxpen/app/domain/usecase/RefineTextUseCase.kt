@@ -1,5 +1,6 @@
 package com.voxpen.app.domain.usecase
 
+import com.voxpen.app.data.local.CorrectionHint
 import com.voxpen.app.data.model.LlmProvider
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.ToneStyle
@@ -23,8 +24,20 @@ class RefineTextUseCase
             customBaseUrl: String? = null,
             translationEnabled: Boolean = false,
             targetLanguage: SttLanguage = SttLanguage.English,
-        ): Result<String> = llmRepository.refine(
-            text, language, apiKey, model, vocabulary, customPrompt, tone, provider, customBaseUrl,
-            translationEnabled, targetLanguage,
-        )
+            correctionHints: List<CorrectionHint> = emptyList(),
+        ): Result<String> =
+            llmRepository.refine(
+                text = text,
+                language = language,
+                apiKey = apiKey,
+                model = model,
+                vocabulary = vocabulary,
+                customPrompt = customPrompt,
+                tone = tone,
+                provider = provider,
+                customBaseUrl = customBaseUrl,
+                translationEnabled = translationEnabled,
+                targetLanguage = targetLanguage,
+                correctionHints = correctionHints,
+            )
     }
