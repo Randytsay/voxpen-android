@@ -11,6 +11,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.voxpen.app.ui.correction.CorrectionMemoryScreenContent
 import com.voxpen.app.ui.dictionary.DictionaryScreenContent
 import com.voxpen.app.ui.onboarding.OnboardingScreenContent
 import com.voxpen.app.ui.settings.SettingsScreenContent
@@ -65,7 +66,13 @@ private fun VoxPenNavHost() {
             TranscriptionScreenContent(onNavigateBack = { navController.popBackStack() })
         }
         composable("dictionary") {
-            DictionaryScreenContent(onNavigateBack = { navController.popBackStack() })
+            DictionaryScreenContent(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToCorrectionMemory = { navController.navigate("correction_memory") },
+            )
+        }
+        composable("correction_memory") {
+            CorrectionMemoryScreenContent(onNavigateBack = { navController.popBackStack() })
         }
     }
 }

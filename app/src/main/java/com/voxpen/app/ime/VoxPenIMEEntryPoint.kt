@@ -3,8 +3,10 @@ package com.voxpen.app.ime
 import com.voxpen.app.billing.ProStatusResolver
 import com.voxpen.app.billing.UsageLimiter
 import com.voxpen.app.data.local.ApiKeyManager
+import com.voxpen.app.data.local.PersonalLearningPreferences
 import com.voxpen.app.data.local.PreferencesManager
 import com.voxpen.app.data.local.RecordingStore
+import com.voxpen.app.data.repository.CorrectionMemoryRepository
 import com.voxpen.app.data.repository.DictionaryRepository
 import com.voxpen.app.data.repository.TranscriptionRepository
 import com.voxpen.app.domain.usecase.EditTextUseCase
@@ -28,6 +30,10 @@ interface VoxPenIMEEntryPoint {
     fun preferencesManager(): PreferencesManager
 
     fun dictionaryRepository(): DictionaryRepository
+
+    fun correctionMemoryRepository(): CorrectionMemoryRepository
+
+    fun personalLearningPreferences(): PersonalLearningPreferences
 
     fun transcriptionRepository(): TranscriptionRepository
 

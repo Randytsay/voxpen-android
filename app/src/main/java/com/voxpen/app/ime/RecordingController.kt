@@ -9,6 +9,7 @@ import com.voxpen.app.data.model.LlmProvider
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.SttProvider
 import com.voxpen.app.data.model.ToneStyle
+import com.voxpen.app.data.repository.CorrectionMemoryRepository
 import com.voxpen.app.data.repository.DictionaryRepository
 import com.voxpen.app.data.repository.TranscriptionRepository
 import com.voxpen.app.domain.usecase.RefineTextUseCase
@@ -37,6 +38,7 @@ class RecordingController(
     private val usageLimiter: UsageLimiter,
     private val proStatusProvider: () -> ProStatus,
     private val ioDispatcher: CoroutineDispatcher,
+    private val correctionMemoryRepository: CorrectionMemoryRepository? = null,
     private val messages: RecordingMessages = RecordingMessages.English,
 ) {
     private val scope =
@@ -177,6 +179,8 @@ class RecordingController(
         language: SttLanguage,
         editMode: Boolean = false,
         toneOverride: ToneStyle? = null,
+        packageName: String = "",
+        allowCorrectionMemory: Boolean = true,
     ) {
         val pcmData =
             stopRecording()
@@ -238,44 +242,27 @@ class RecordingController(
             val proStatus =
                 proStatusProvider()
 
-            /*
-             * ------------------------------------------------
-             * 自訂詞庫
-             * ------------------------------------------------
-             *
-             * 重要詞：
-             * 使用者在 App 詞庫畫面自行以 ⭐ 標記。
-             *
-             * 一般詞：
-             * 取最近加入的 500 個。
-             *
-             * 排序方式：
-             *
-             * 重要詞
-             * ↓
-             * 最近 500 個一般詞
-             * ↓
-             * 去除重複
-             *
-             * VocabularyPromptBuilder 仍會依
-             * Whisper token budget 決定實際送出的數量。
-             */
-
             val importantVocabulary =
                 preferencesManager
                     .importantWordsFlow
                     .first()
-                    .sorted()
 
             val recentVocabulary =
                 dictionaryRepository
                     .getWords(500)
 
+            // Preserve recent order for important terms instead of sorting all important terms alphabetically.
+            val prioritizedImportant =
+                recentVocabulary.filter { it in importantVocabulary } +
+                    importantVocabulary
+                        .filterNot { it in recentVocabulary }
+                        .sorted()
+
+            val ordinaryVocabulary =
+                recentVocabulary.filterNot { it in importantVocabulary }
+
             val vocabulary =
-                (
-                    importantVocabulary +
-                        recentVocabulary
-                    ).distinct()
+                (prioritizedImportant + ordinaryVocabulary).distinct()
 
             val whisperPrompt =
                 if (vocabulary.isNotEmpty()) {
@@ -310,9 +297,6 @@ class RecordingController(
                             .incrementVoiceInput()
                     }
 
-                    /*
-                     * Speak-to-Edit
-                     */
                     if (editMode) {
                         _uiState.value =
                             ImeUiState.EditInstruction(
@@ -322,12 +306,6 @@ class RecordingController(
                         return@launch
                     }
 
-                    /*
-                     * Voice command
-                     *
-                     * 如果辨識結果為鍵盤語音指令，
-                     * 執行動作而不是插入文字。
-                     */
                     val command =
                         VoiceCommandRecognizer
                             .recognize(
@@ -343,6 +321,22 @@ class RecordingController(
                         return@launch
                     }
 
+                    val correctionPreparation =
+                        correctionMemoryRepository
+                            ?.prepareForText(
+                                text = originalText,
+                                packageName = packageName,
+                                allowMemory = allowCorrectionMemory,
+                            )
+
+                    val correctedOriginalText =
+                        correctionPreparation?.correctedText
+                            ?: originalText
+
+                    val correctionHints =
+                        correctionPreparation?.hints
+                            ?: emptyList()
+
                     val shouldRefine =
                         refinementEnabled &&
                             canUseRefinement(
@@ -352,7 +346,7 @@ class RecordingController(
                     if (!shouldRefine) {
                         _uiState.value =
                             ImeUiState.Result(
-                                originalText,
+                                correctedOriginalText,
                             )
 
                         return@launch
@@ -360,7 +354,7 @@ class RecordingController(
 
                     _uiState.value =
                         ImeUiState.Refining(
-                            originalText,
+                            correctedOriginalText,
                         )
 
                     if (!proStatus.isPro) {
@@ -368,18 +362,6 @@ class RecordingController(
                             .incrementRefinement()
                     }
 
-                    /*
-                     * LLM 潤稿詞庫
-                     *
-                     * 使用與 STT 相同的：
-                     *
-                     * ⭐ 重要詞
-                     * +
-                     * 最近 500 個詞
-                     *
-                     * 所以重要詞不只影響 Whisper，
-                     * 也會提供給後續 AI 潤稿。
-                     */
                     val allVocabulary =
                         vocabulary
 
@@ -429,34 +411,31 @@ class RecordingController(
 
                     val refinedResult =
                         refineTextUseCase(
-                            originalText,
-                            language,
-                            llmApiKey,
-                            resolvedModel,
-                            allVocabulary,
-                            customPrompt,
-                            effectiveTone,
-                            llmProvider,
-                            customBaseUrl,
-                            translationEnabled,
-                            translationTargetLanguage,
+                            text = correctedOriginalText,
+                            language = language,
+                            apiKey = llmApiKey,
+                            model = resolvedModel,
+                            vocabulary = allVocabulary,
+                            customPrompt = customPrompt,
+                            tone = effectiveTone,
+                            provider = llmProvider,
+                            customBaseUrl = customBaseUrl,
+                            translationEnabled = translationEnabled,
+                            targetLanguage = translationTargetLanguage,
+                            correctionHints = correctionHints,
                         )
 
                     _uiState.value =
                         refinedResult.fold(
                             onSuccess = {
                                 ImeUiState.Refined(
-                                    originalText,
+                                    correctedOriginalText,
                                     it,
                                 )
                             },
                             onFailure = {
-                                /*
-                                 * 潤稿失敗時仍保留
-                                 * Whisper 原始辨識文字。
-                                 */
                                 ImeUiState.Result(
-                                    originalText,
+                                    correctedOriginalText,
                                 )
                             },
                         )
@@ -469,10 +448,6 @@ class RecordingController(
                                 it.message,
                             )
 
-                    /*
-                     * STT 失敗時保留錄音，
-                     * 供後續 Retry 使用。
-                     */
                     runCatching {
                         val audioPath =
                             recordingStore

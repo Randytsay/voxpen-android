@@ -12,6 +12,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.ExtractedTextRequest
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -19,11 +20,13 @@ import android.widget.PopupWindow
 import android.widget.ProgressBar
 import android.widget.TextView
 import com.voxpen.app.R
+import com.voxpen.app.data.local.PersonalLearningPreferences
 import com.voxpen.app.data.local.PreferencesManager
 import com.voxpen.app.data.model.RecordingMode
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.ToneStyle
 import com.voxpen.app.data.model.VoiceCommand
+import com.voxpen.app.data.repository.CorrectionMemoryRepository
 import com.voxpen.app.domain.usecase.EditTextUseCase
 import com.voxpen.app.ui.MainActivity
 import dagger.hilt.android.EntryPointAccessors
@@ -45,6 +48,8 @@ class VoxPenIME : InputMethodService() {
     private lateinit var proStatusResolver: com.voxpen.app.billing.ProStatusResolver
     private lateinit var editTextUseCase: EditTextUseCase
     private lateinit var apiKeyManager: com.voxpen.app.data.local.ApiKeyManager
+    private lateinit var correctionMemoryRepository: CorrectionMemoryRepository
+    private lateinit var personalLearningPreferences: PersonalLearningPreferences
 
     private var isEditMode: Boolean = false
     @Volatile private var effectiveTone: ToneStyle = ToneStyle.DEFAULT
@@ -83,6 +88,9 @@ class VoxPenIME : InputMethodService() {
     // Previous state tracking for haptic/sound feedback
     private var previousUiState: ImeUiState = ImeUiState.Idle
 
+    // A single pending observation is enough: learn only from the edit immediately following a VoxPen commit.
+    private var pendingCommittedSnapshot: PendingCommittedSnapshot? = null
+
     // Recording timer
     private var recordingStartTime: Long = 0
     private val timerHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -97,11 +105,12 @@ class VoxPenIME : InputMethodService() {
                 val remaining = MAX_RECORDING_SECONDS - elapsed
                 val minutes = elapsed / 60
                 val seconds = elapsed % 60
-                candidateText?.text = if (remaining <= 30) {
-                    "⚠️ ${getString(R.string.recording)} – 0:%02d".format(remaining)
-                } else {
-                    getString(R.string.recording) + " $minutes:%02d".format(seconds)
-                }
+                candidateText?.text =
+                    if (remaining <= 30) {
+                        "⚠️ ${getString(R.string.recording)} – 0:%02d".format(remaining)
+                    } else {
+                        getString(R.string.recording) + " $minutes:%02d".format(seconds)
+                    }
                 timerHandler.postDelayed(this, 1000)
             }
         }
@@ -119,6 +128,8 @@ class VoxPenIME : InputMethodService() {
         proStatusResolver = entryPoint.proStatusResolver()
         editTextUseCase = entryPoint.editTextUseCase()
         apiKeyManager = entryPoint.apiKeyManager()
+        correctionMemoryRepository = entryPoint.correctionMemoryRepository()
+        personalLearningPreferences = entryPoint.personalLearningPreferences()
         recordingController =
             RecordingController(
                 transcribeUseCase = entryPoint.transcribeAudioUseCase(),
@@ -131,6 +142,7 @@ class VoxPenIME : InputMethodService() {
                 usageLimiter = entryPoint.usageLimiter(),
                 proStatusProvider = { proStatusResolver.proStatus.value },
                 ioDispatcher = Dispatchers.IO,
+                correctionMemoryRepository = correctionMemoryRepository,
                 messages =
                     object : RecordingMessages {
                         override fun apiKeyNotConfigured(): String = getString(R.string.provider_key_required)
@@ -271,7 +283,9 @@ class VoxPenIME : InputMethodService() {
                                 startRecording()
                                 true
                             }
-                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            MotionEvent.ACTION_UP,
+                            MotionEvent.ACTION_CANCEL,
+                            -> {
                                 stopRecording()
                                 true
                             }
@@ -285,13 +299,19 @@ class VoxPenIME : InputMethodService() {
 
     private fun handleMicTap() {
         when (recordingController.uiState.value) {
-            ImeUiState.Idle, is ImeUiState.Error, is ImeUiState.Result,
-            is ImeUiState.Refined, is ImeUiState.CommandDetected,
+            ImeUiState.Idle,
+            is ImeUiState.Error,
+            is ImeUiState.Result,
+            is ImeUiState.Refined,
+            is ImeUiState.CommandDetected,
             is ImeUiState.EditResult,
             -> startRecording()
             ImeUiState.Recording -> stopRecording()
-            ImeUiState.Processing, is ImeUiState.Refining,
-            ImeUiState.Editing, is ImeUiState.EditInstruction -> { /* ignore mid-processing */ }
+            ImeUiState.Processing,
+            is ImeUiState.Refining,
+            ImeUiState.Editing,
+            is ImeUiState.EditInstruction,
+            -> { /* ignore mid-processing */ }
         }
     }
 
@@ -302,6 +322,8 @@ class VoxPenIME : InputMethodService() {
             candidateProgress?.visibility = View.GONE
             return
         }
+
+        learnFromPendingManualEdit()
         requestAudioDucking()
         recordingController.onStartRecording { audioRecorder.startRecording() }
     }
@@ -310,24 +332,31 @@ class VoxPenIME : InputMethodService() {
         abandonAudioDucking()
         serviceScope.launch {
             val language = preferencesManager.languageFlow.first()
+            val editorInfo = currentInputEditorInfo
             recordingController.onStopRecording(
                 stopRecording = { audioRecorder.stopRecording() },
                 language = language,
                 editMode = isEditMode,
                 toneOverride = effectiveTone,
+                packageName = editorInfo?.packageName.orEmpty(),
+                allowCorrectionMemory =
+                    ImePrivacyPolicy.shouldUseCorrectionMemory(
+                        editorInfo?.inputType ?: 0,
+                    ),
             )
         }
     }
 
     private fun requestAudioDucking() {
-        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build(),
-            )
-            .build()
+        val request =
+            AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build(),
+                )
+                .build()
         audioFocusRequest = request
         val result = audioManager?.requestAudioFocus(request)
         if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
@@ -346,7 +375,6 @@ class VoxPenIME : InputMethodService() {
         }
     }
 
-    // Start mic pulse animation
     private fun startMicPulse(micBtn: ImageButton) {
         val scaleX = android.animation.ObjectAnimator.ofFloat(micBtn, "scaleX", 1f, 1.15f, 1f)
         val scaleY = android.animation.ObjectAnimator.ofFloat(micBtn, "scaleY", 1f, 1.15f, 1f)
@@ -369,7 +397,6 @@ class VoxPenIME : InputMethodService() {
             }
     }
 
-    // Stop mic pulse animation
     private fun stopMicPulse() {
         micPulseAnimator?.cancel()
         micPulseAnimator = null
@@ -380,12 +407,10 @@ class VoxPenIME : InputMethodService() {
         }
     }
 
-    // Haptic feedback
     private fun performHaptic(type: Int) {
         micButton?.performHapticFeedback(type)
     }
 
-    // Sound effects
     private fun playTone(toneType: Int) {
         try {
             val toneGen =
@@ -419,7 +444,9 @@ class VoxPenIME : InputMethodService() {
                 performHaptic(HapticFeedbackConstants.KEYBOARD_TAP)
                 playTone(android.media.ToneGenerator.TONE_PROP_ACK)
             }
-            is ImeUiState.Result, is ImeUiState.Refined -> {
+            is ImeUiState.Result,
+            is ImeUiState.Refined,
+            -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     performHaptic(HapticFeedbackConstants.CONFIRM)
                 } else {
@@ -523,12 +550,73 @@ class VoxPenIME : InputMethodService() {
 
     /** Commits candidate text without losing it when the current editor is unavailable. */
     private fun commitCandidateText(text: String): Boolean {
+        if (text.isBlank()) return false
         val connection = currentInputConnection ?: return false
         val committed = runCatching { connection.commitText(text, 1) }.getOrDefault(false)
         if (committed) {
+            rememberCommittedText(text)
             recordingController.dismiss()
         }
         return committed
+    }
+
+    private fun rememberCommittedText(text: String) {
+        val editorInfo = currentInputEditorInfo ?: return
+        if (!ImePrivacyPolicy.shouldLearnFromInput(editorInfo.inputType)) {
+            pendingCommittedSnapshot = null
+            return
+        }
+
+        val extracted =
+            currentInputConnection
+                ?.getExtractedText(ExtractedTextRequest(), 0)
+                ?: return
+        val baseline = extracted.text?.toString() ?: return
+        val end = extracted.selectionStart.coerceIn(0, baseline.length)
+        val start = (end - text.length).coerceAtLeast(0)
+        if (start >= end) return
+
+        pendingCommittedSnapshot =
+            PendingCommittedSnapshot(
+                baselineText = baseline,
+                committedStart = start,
+                committedEnd = end,
+                packageName = editorInfo.packageName.orEmpty(),
+                inputType = editorInfo.inputType,
+            )
+    }
+
+    private fun learnFromPendingManualEdit() {
+        val pending = pendingCommittedSnapshot ?: return
+        pendingCommittedSnapshot = null
+
+        if (!personalLearningPreferences.enabled.value) return
+        val editorInfo = currentInputEditorInfo ?: return
+        if (editorInfo.packageName.orEmpty() != pending.packageName) return
+        if (!ImePrivacyPolicy.shouldLearnFromInput(editorInfo.inputType)) return
+        if (!ImePrivacyPolicy.shouldLearnFromInput(pending.inputType)) return
+
+        val current =
+            currentInputConnection
+                ?.getExtractedText(ExtractedTextRequest(), 0)
+                ?.text
+                ?.toString()
+                ?: return
+
+        val candidate =
+            CorrectionLearningDetector.detect(
+                baselineText = pending.baselineText,
+                currentText = current,
+                committedStart = pending.committedStart,
+                committedEnd = pending.committedEnd,
+            ) ?: return
+
+        serviceScope.launch(Dispatchers.IO) {
+            correctionMemoryRepository.learn(
+                candidate = candidate,
+                packageName = pending.packageName,
+            )
+        }
     }
 
     private fun updateMicAppearance(state: ImeUiState) {
@@ -579,12 +667,13 @@ class VoxPenIME : InputMethodService() {
             val dp = resources.displayMetrics.density
 
             val container = createQuickSettingsContainer(dp)
-            val popup = PopupWindow(
-                container,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                true,
-            )
+            val popup =
+                PopupWindow(
+                    container,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    true,
+                )
 
             addLanguageSelector(container, popup, currentLang, dp)
             addRefinementToggle(container, popup, refinementOn, dp)
@@ -602,42 +691,45 @@ class VoxPenIME : InputMethodService() {
 
             val container = createQuickSettingsContainer(dp)
 
-            val popup = PopupWindow(
-                container,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                true,
-            )
+            val popup =
+                PopupWindow(
+                    container,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    true,
+                )
 
-            val tones = listOf(
-                ToneStyle.Casual to getString(R.string.tone_popup_casual),
-                ToneStyle.Professional to getString(R.string.tone_popup_professional),
-                ToneStyle.Email to getString(R.string.tone_popup_email),
-                ToneStyle.Note to getString(R.string.tone_popup_note),
-                ToneStyle.Social to getString(R.string.tone_popup_social),
-                ToneStyle.Custom to getString(R.string.tone_popup_custom),
-            )
+            val tones =
+                listOf(
+                    ToneStyle.Casual to getString(R.string.tone_popup_casual),
+                    ToneStyle.Professional to getString(R.string.tone_popup_professional),
+                    ToneStyle.Email to getString(R.string.tone_popup_email),
+                    ToneStyle.Note to getString(R.string.tone_popup_note),
+                    ToneStyle.Social to getString(R.string.tone_popup_social),
+                    ToneStyle.Custom to getString(R.string.tone_popup_custom),
+                )
 
             tones.forEach { (tone, label) ->
-                val tv = TextView(this@VoxPenIME).apply {
-                    text = label
-                    textSize = 14f
-                    setTextColor(
-                        if (tone == currentTone) {
-                            resources.getColor(R.color.mic_idle, null)
-                        } else {
-                            resources.getColor(R.color.key_text, null)
-                        },
-                    )
-                    val pad = (8 * dp).toInt()
-                    setPadding(pad, pad, pad, pad)
-                    setOnClickListener {
-                        effectiveTone = tone
-                        updateToneButton()
-                        serviceScope.launch { preferencesManager.setToneStyle(tone) }
-                        popup.dismiss()
+                val tv =
+                    TextView(this@VoxPenIME).apply {
+                        text = label
+                        textSize = 14f
+                        setTextColor(
+                            if (tone == currentTone) {
+                                resources.getColor(R.color.mic_idle, null)
+                            } else {
+                                resources.getColor(R.color.key_text, null)
+                            },
+                        )
+                        val pad = (8 * dp).toInt()
+                        setPadding(pad, pad, pad, pad)
+                        setOnClickListener {
+                            effectiveTone = tone
+                            updateToneButton()
+                            serviceScope.launch { preferencesManager.setToneStyle(tone) }
+                            popup.dismiss()
+                        }
                     }
-                }
                 container.addView(tv)
             }
 
@@ -651,45 +743,48 @@ class VoxPenIME : InputMethodService() {
         currentLang: SttLanguage,
         dp: Float,
     ) {
-        val languages = listOf(
-            SttLanguage.Auto to "${SttLanguage.Auto.emoji} ${getString(R.string.lang_auto)}",
-            SttLanguage.Chinese to "${SttLanguage.Chinese.emoji} ${getString(R.string.lang_zh)}",
-            SttLanguage.English to "${SttLanguage.English.emoji} ${getString(R.string.lang_en)}",
-            SttLanguage.Japanese to "${SttLanguage.Japanese.emoji} ${getString(R.string.lang_ja)}",
-        )
+        val languages =
+            listOf(
+                SttLanguage.Auto to "${SttLanguage.Auto.emoji} ${getString(R.string.lang_auto)}",
+                SttLanguage.Chinese to "${SttLanguage.Chinese.emoji} ${getString(R.string.lang_zh)}",
+                SttLanguage.English to "${SttLanguage.English.emoji} ${getString(R.string.lang_en)}",
+                SttLanguage.Japanese to "${SttLanguage.Japanese.emoji} ${getString(R.string.lang_ja)}",
+            )
 
         languages.forEach { (lang, label) ->
-            val tv = TextView(this).apply {
-                text = label
-                textSize = 14f
-                setTextColor(
-                    if (lang == currentLang) {
-                        resources.getColor(R.color.mic_idle, null)
-                    } else {
-                        resources.getColor(R.color.key_text, null)
-                    },
-                )
-                val pad = (8 * dp).toInt()
-                setPadding(pad, pad, pad, pad)
-                setOnClickListener {
-                    serviceScope.launch { preferencesManager.setLanguage(lang) }
-                    popup.dismiss()
+            val tv =
+                TextView(this).apply {
+                    text = label
+                    textSize = 14f
+                    setTextColor(
+                        if (lang == currentLang) {
+                            resources.getColor(R.color.mic_idle, null)
+                        } else {
+                            resources.getColor(R.color.key_text, null)
+                        },
+                    )
+                    val pad = (8 * dp).toInt()
+                    setPadding(pad, pad, pad, pad)
+                    setOnClickListener {
+                        serviceScope.launch { preferencesManager.setLanguage(lang) }
+                        popup.dismiss()
+                    }
                 }
-            }
             container.addView(tv)
         }
 
-        // Divider between language selector and toggles
-        val divider = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                (1 * dp).toInt(),
-            ).apply {
-                topMargin = (4 * dp).toInt()
-                bottomMargin = (4 * dp).toInt()
+        val divider =
+            View(this).apply {
+                layoutParams =
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        (1 * dp).toInt(),
+                    ).apply {
+                        topMargin = (4 * dp).toInt()
+                        bottomMargin = (4 * dp).toInt()
+                    }
+                setBackgroundColor(0x33FFFFFF)
             }
-            setBackgroundColor(0x33FFFFFF)
-        }
         container.addView(divider)
     }
 
@@ -727,8 +822,9 @@ class VoxPenIME : InputMethodService() {
 
         serviceScope.launch {
             val llmProvider = preferencesManager.llmProviderFlow.first()
-            val apiKey = apiKeyManager.getApiKey(llmProvider)
-                ?: apiKeyManager.getGroqApiKey()
+            val apiKey =
+                apiKeyManager.getApiKey(llmProvider)
+                    ?: apiKeyManager.getGroqApiKey()
             if (apiKey.isNullOrBlank() && llmProvider != com.voxpen.app.data.model.LlmProvider.Custom) {
                 showStatusRow("API key not configured", showProgress = false)
                 candidateBar?.postDelayed({ recordingController.dismiss() }, 2000)
@@ -736,28 +832,31 @@ class VoxPenIME : InputMethodService() {
             }
 
             val language = preferencesManager.languageFlow.first()
-            val llmModel = if (llmProvider == com.voxpen.app.data.model.LlmProvider.Custom) {
-                preferencesManager.customLlmModelFlow.first().ifBlank {
+            val llmModel =
+                if (llmProvider == com.voxpen.app.data.model.LlmProvider.Custom) {
+                    preferencesManager.customLlmModelFlow.first().ifBlank {
+                        preferencesManager.llmModelFlow.first()
+                    }
+                } else {
                     preferencesManager.llmModelFlow.first()
                 }
-            } else {
-                preferencesManager.llmModelFlow.first()
-            }
-            val customBaseUrl = if (llmProvider == com.voxpen.app.data.model.LlmProvider.Custom) {
-                apiKeyManager.getCustomBaseUrl()
-            } else {
-                null
-            }
+            val customBaseUrl =
+                if (llmProvider == com.voxpen.app.data.model.LlmProvider.Custom) {
+                    apiKeyManager.getCustomBaseUrl()
+                } else {
+                    null
+                }
 
-            val result = editTextUseCase(
-                selectedText = selectedText,
-                instruction = instruction,
-                language = language,
-                apiKey = apiKey.orEmpty(),
-                model = llmModel,
-                provider = llmProvider,
-                customBaseUrl = customBaseUrl,
-            )
+            val result =
+                editTextUseCase(
+                    selectedText = selectedText,
+                    instruction = instruction,
+                    language = language,
+                    apiKey = apiKey.orEmpty(),
+                    model = llmModel,
+                    provider = llmProvider,
+                    customBaseUrl = customBaseUrl,
+                )
 
             result.fold(
                 onSuccess = { revised ->
@@ -773,7 +872,11 @@ class VoxPenIME : InputMethodService() {
         }
     }
 
-    private fun addEditModeToggle(container: LinearLayout, popup: PopupWindow, dp: Float) {
+    private fun addEditModeToggle(
+        container: LinearLayout,
+        popup: PopupWindow,
+        dp: Float,
+    ) {
         val tv =
             TextView(this).apply {
                 text =
@@ -933,18 +1036,17 @@ class VoxPenIME : InputMethodService() {
     private fun cycleTranslationTarget() {
         val targets = getTranslationTargets()
         if (!translationEnabled) {
-            // Off → first target
             serviceScope.launch {
                 preferencesManager.setTranslationTargetLanguage(targets.first())
                 preferencesManager.setTranslationEnabled(true)
             }
             return
         }
-        val currentIndex = targets.indexOf(translationTargetLanguage)
-            .let { if (it == -1) targets.size - 1 else it }
+        val currentIndex =
+            targets.indexOf(translationTargetLanguage)
+                .let { if (it == -1) targets.size - 1 else it }
         val nextIndex = currentIndex + 1
         if (nextIndex >= targets.size) {
-            // Last target → Off
             serviceScope.launch { preferencesManager.setTranslationEnabled(false) }
         } else {
             serviceScope.launch { preferencesManager.setTranslationTargetLanguage(targets[nextIndex]) }
@@ -959,19 +1061,21 @@ class VoxPenIME : InputMethodService() {
         translationIndicatorRow?.visibility = View.VISIBLE
         candidateBar?.visibility = View.VISIBLE
 
-        val targetName = when (translationTargetLanguage) {
-            SttLanguage.English -> getString(R.string.lang_en)
-            SttLanguage.Chinese -> getString(R.string.lang_zh)
-            SttLanguage.Japanese -> getString(R.string.lang_ja)
-            else -> translationTargetLanguage.code ?: "?"
-        }
+        val targetName =
+            when (translationTargetLanguage) {
+                SttLanguage.English -> getString(R.string.lang_en)
+                SttLanguage.Chinese -> getString(R.string.lang_zh)
+                SttLanguage.Japanese -> getString(R.string.lang_ja)
+                else -> translationTargetLanguage.code ?: "?"
+            }
 
-        val formatRes = when (currentSttLanguage) {
-            SttLanguage.Chinese -> R.string.translation_indicator_speak_zh
-            SttLanguage.English -> R.string.translation_indicator_speak_en
-            SttLanguage.Japanese -> R.string.translation_indicator_speak_ja
-            else -> R.string.translation_indicator_speak_auto
-        }
+        val formatRes =
+            when (currentSttLanguage) {
+                SttLanguage.Chinese -> R.string.translation_indicator_speak_zh
+                SttLanguage.English -> R.string.translation_indicator_speak_en
+                SttLanguage.Japanese -> R.string.translation_indicator_speak_ja
+                else -> R.string.translation_indicator_speak_auto
+            }
         translationLabel?.text = getString(formatRes, targetName)
     }
 
@@ -989,21 +1093,21 @@ class VoxPenIME : InputMethodService() {
         toneButton?.text = effectiveTone.emoji
     }
 
-    override fun onStartInput(info: EditorInfo, restarting: Boolean) {
+    override fun onStartInput(
+        info: EditorInfo,
+        restarting: Boolean,
+    ) {
         super.onStartInput(info, restarting)
         if (autoToneEnabled) {
-            val detected = AppToneDetector.detect(
-                packageName = info.packageName ?: "",
-                inputType = info.inputType,
-                customRules = customAppToneRules,
-            )
+            val detected =
+                AppToneDetector.detect(
+                    packageName = info.packageName ?: "",
+                    inputType = info.inputType,
+                    customRules = customAppToneRules,
+                )
             if (detected != null) {
                 effectiveTone = detected
             }
-            // If nothing detected, effectiveTone retains the last value synced from toneStyleFlow
-        } else {
-            // When auto-tone is off, effectiveTone stays in sync with toneStyleFlow via the
-            // collector in onCreateInputView; nothing extra needed here.
         }
         updateToneButton()
     }
@@ -1012,9 +1116,18 @@ class VoxPenIME : InputMethodService() {
         stopMicPulse()
         timerHandler.removeCallbacks(timerRunnable)
         abandonAudioDucking()
+        pendingCommittedSnapshot = null
         audioRecorder.release()
         recordingController.destroy()
         serviceScope.cancel()
         super.onDestroy()
     }
+
+    private data class PendingCommittedSnapshot(
+        val baselineText: String,
+        val committedStart: Int,
+        val committedEnd: Int,
+        val packageName: String,
+        val inputType: Int,
+    )
 }

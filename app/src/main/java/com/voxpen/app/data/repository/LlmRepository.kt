@@ -1,5 +1,6 @@
 package com.voxpen.app.data.repository
 
+import com.voxpen.app.data.local.CorrectionHint
 import com.voxpen.app.data.model.LlmProvider
 import com.voxpen.app.data.model.RefinementPrompt
 import com.voxpen.app.data.model.SttLanguage
@@ -8,6 +9,7 @@ import com.voxpen.app.data.model.TranslationPrompt
 import com.voxpen.app.data.remote.ChatCompletionApiFactory
 import com.voxpen.app.data.remote.ChatCompletionRequest
 import com.voxpen.app.data.remote.ChatMessage
+import com.voxpen.app.util.CorrectionPromptBuilder
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,6 +32,7 @@ class LlmRepository
             customBaseUrl: String? = null,
             translationEnabled: Boolean = false,
             targetLanguage: SttLanguage = SttLanguage.English,
+            correctionHints: List<CorrectionHint> = emptyList(),
         ): Result<String> {
             if (apiKey.isBlank() && provider != LlmProvider.Custom) {
                 return Result.failure(IllegalStateException("API key not configured"))
@@ -42,17 +45,22 @@ class LlmRepository
             }
 
             return try {
-                val api = if (provider == LlmProvider.Custom && !customBaseUrl.isNullOrBlank()) {
-                    apiFactory.createForCustom(customBaseUrl)
-                } else {
-                    apiFactory.create(provider)
-                }
-                val basePrompt = if (translationEnabled) {
-                    TranslationPrompt.build(language, targetLanguage)
-                } else {
-                    RefinementPrompt.forLanguage(language, vocabulary, customPrompt, tone)
-                }
-                val systemPrompt = basePrompt + SPEECH_TAG_INSTRUCTION
+                val api =
+                    if (provider == LlmProvider.Custom && !customBaseUrl.isNullOrBlank()) {
+                        apiFactory.createForCustom(customBaseUrl)
+                    } else {
+                        apiFactory.create(provider)
+                    }
+                val basePrompt =
+                    if (translationEnabled) {
+                        TranslationPrompt.build(language, targetLanguage)
+                    } else {
+                        RefinementPrompt.forLanguage(language, vocabulary, customPrompt, tone)
+                    }
+                val systemPrompt =
+                    basePrompt +
+                        CorrectionPromptBuilder.build(correctionHints) +
+                        SPEECH_TAG_INSTRUCTION
                 val userContent = "<speech>\n$text\n</speech>"
                 val request =
                     ChatCompletionRequest(
@@ -95,18 +103,20 @@ class LlmRepository
             if (userMessage.isBlank()) return Result.failure(IllegalArgumentException("Message is empty"))
 
             return try {
-                val api = if (provider == LlmProvider.Custom && !customBaseUrl.isNullOrBlank()) {
-                    apiFactory.createForCustom(customBaseUrl)
-                } else {
-                    apiFactory.create(provider)
-                }
-                val request = ChatCompletionRequest(
-                    model = model,
-                    messages = listOf(ChatMessage(role = "user", content = userMessage)),
-                    temperature = TEMPERATURE,
-                    maxTokens = MAX_TOKENS,
-                    reasoningFormat = reasoningFormatFor(model),
-                )
+                val api =
+                    if (provider == LlmProvider.Custom && !customBaseUrl.isNullOrBlank()) {
+                        apiFactory.createForCustom(customBaseUrl)
+                    } else {
+                        apiFactory.create(provider)
+                    }
+                val request =
+                    ChatCompletionRequest(
+                        model = model,
+                        messages = listOf(ChatMessage(role = "user", content = userMessage)),
+                        temperature = TEMPERATURE,
+                        maxTokens = MAX_TOKENS,
+                        reasoningFormat = reasoningFormatFor(model),
+                    )
                 val response = api.chatCompletion("Bearer $apiKey", request)
                 val raw = response.choices.firstOrNull()?.message?.content
                     ?: return Result.failure(IllegalStateException("No response content"))
@@ -133,7 +143,8 @@ class LlmRepository
 
             /** Returns "hidden" for known thinking models, null otherwise. */
             fun reasoningFormatFor(model: String): String? =
-                if (model.contains("qwen3", ignoreCase = true) ||
+                if (
+                    model.contains("qwen3", ignoreCase = true) ||
                     model.contains("deepseek-r1", ignoreCase = true)
                 ) {
                     "hidden"
