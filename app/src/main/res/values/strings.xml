@@ -134,7 +134,7 @@
     <string name="onboarding_tip_language">Long-press \uD83C\uDF10 to pick a different keyboard</string>
     <string name="onboarding_tip_refinement">Long-press \u2699 for quick settings — switch language, toggle refinement, translation, or edit mode</string>
     <string name="onboarding_tip_tone">Tap the tone button (\uD83D\uDCAC) to change writing style</string>
-    <string name="onboarding_tip_recording_limit">Each recording is limited to 6 minutes. A countdown appears in the last 30 seconds.</string>
+    <string name="onboarding_tip_recording_limit">Each recording is limited to 10 minutes. A countdown appears in the last 30 seconds.</string>
     <string name="onboarding_tip_voice_commands">Say a command word to trigger keyboard actions — "send"/"送出"/"送信" sends, "delete"/"刪除"/"削除" backspaces, "new line"/"換行"/"改行" inserts a newline.</string>
     <string name="onboarding_tip_speak_to_edit">Select text in any app, then long-press \u2699 → ✏️ Edit Mode → tap mic and describe your edit. The LLM rewrites the selection in place.</string>
 
@@ -270,10 +270,15 @@
     <string name="provider_custom">Custom / LiteLLM / Ollama</string>
     <string name="provider_key_configured">API key configured ✓</string>
     <string name="provider_api_key_hint">%1$s API Key</string>
+    <string name="provider_vertex_gateway_url">Vertex Gateway URL</string>
+    <string name="provider_vertex_gateway_url_hint">Your private gateway URL ending in /v1 (the app never stores Google credentials).</string>
+    <string name="provider_vertex_gateway_token">Gateway Token</string>
+    <string name="provider_vertex_gateway_token_hint">Bearer token configured on your gateway</string>
     <string name="provider_custom_base_url">Base URL</string>
     <string name="provider_custom_base_url_hint">API endpoint URL (e.g., LiteLLM, Ollama, or another OpenAI-compatible server)</string>
     <string name="provider_custom_model">Model name</string>
     <string name="provider_test">Test provider</string>
+    <string name="provider_test_vertex">Test Vertex provider</string>
     <string name="provider_testing">Testing…</string>
     <string name="provider_test_ok">Provider works. %1$s</string>
     <string name="provider_test_failed">Failed: %1$s</string>

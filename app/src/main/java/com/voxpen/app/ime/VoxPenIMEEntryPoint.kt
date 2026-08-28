@@ -3,6 +3,7 @@ package com.voxpen.app.ime
 import com.voxpen.app.billing.ProStatusResolver
 import com.voxpen.app.billing.UsageLimiter
 import com.voxpen.app.data.local.ApiKeyManager
+import com.voxpen.app.data.local.ContextMemoryManager
 import com.voxpen.app.data.local.PersonalLearningPreferences
 import com.voxpen.app.data.local.PreferencesManager
 import com.voxpen.app.data.local.RecordingStore
@@ -26,6 +27,8 @@ interface VoxPenIMEEntryPoint {
     fun editTextUseCase(): EditTextUseCase
 
     fun apiKeyManager(): ApiKeyManager
+
+    fun contextMemoryManager(): ContextMemoryManager
 
     fun preferencesManager(): PreferencesManager
 

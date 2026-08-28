@@ -41,12 +41,12 @@
 
 ## VoxPen 是什麼？
 
-VoxPen 是一款 Android 語音鍵盤，透過 Whisper 將語音轉為文字，再以 LLM 潤稿，將乾淨的文字插入任何 App。採用 **BYOK（自帶金鑰）** 模式 — 使用你自己的 API 金鑰，用多少付多少。無需訂閱、不收集資料、完全開源。
+VoxPen 是一款 Android 語音鍵盤，透過 Whisper 將語音轉為文字，再以 LLM 潤稿，將乾淨的文字插入任何 App。採用 **BYOK（自帶金鑰）** 模式 — 使用你自己的 API 金鑰，用多少付多少。無需訂閱、無遙測、完全開源。
 
 ## 功能特色
 
 ### 語音聽寫
-點擊麥克風說話，VoxPen 透過 Whisper 轉錄，可選擇以 LLM 潤稿，並在候選列顯示辨識結果。預設需點擊候選文字才會插入；也可以開啟「辨識結果自動插入」。
+點擊麥克風說話，VoxPen 以 16 kHz、單聲道、16-bit PCM 錄音，每 60 秒分段上傳 Whisper，再以 LLM 潤稿，並在候選列顯示辨識結果。每次錄音最長 10 分鐘。預設需點擊候選文字才會插入；也可以開啟「辨識結果自動插入」。
 
 ### 辨識結果自動插入
 至 **設定 → 辨識結果自動插入** 開啟後，完成辨識的文字會直接放入目前使用中的文字欄位：
@@ -60,7 +60,13 @@ VoxPen 是一款 Android 語音鍵盤，透過 Whisper 將語音轉為文字，�
 關閉此設定時，維持原本的候選列操作方式不變。
 
 ### 自定義詞彙
-可在「字典」加入人名、地名與專有名詞。標記為重要詞彙後，會優先提供給語音辨識與 LLM 潤稿；最近的字典詞彙也會提供給語音流程，實際數量仍受服務商 token 預算限制。Free 使用者最多可儲存 10 個詞彙，Pro 版本則支援無限詞彙。
+可在「字典」加入人名、地名與專有名詞。標記為重要詞彙後，會優先提供給語音辨識與 LLM 潤稿。Whisper 會在約 200 token 提示預算內優先放入重要詞；LLM 則分開收到重要詞、相關詞，以及目前 App 最近 5 筆成功插入文字。Free 使用者最多可儲存 10 個詞彙，Pro 版本則支援無限詞彙。
+
+### 上下文記憶
+只有文字確實插入成功後，VoxPen 才會在本機 DataStore 為目標 App 保留最多 5 筆短文字。上下文依 App package 隔離，只作下一次潤稿的參考；密碼輸入欄位不讀取也不儲存。失敗、空白、語音指令與編輯指令都不會寫入記憶。
+
+### Google Vertex Gemini
+Android 支援透過 [`vertex-gateway/`](vertex-gateway/) 使用 **Google Vertex**。在設定選擇 Google Vertex，輸入私人 gateway 的 `/v1` 網址與 gateway token；Google ADC 憑證只放在 gateway 主機。App 使用 `google/gemini-3.7-flash`、`reasoning_effort=low` 與 `max_tokens=4096`，不會包含 service-account key 或 Google 憑證。
 
 ### 翻譯模式
 說 A 語言，輸出 B 語言。直接在鍵盤上快速切換翻譯目標語言，無需進入設定。
@@ -78,7 +84,7 @@ VoxPen 偵測目前使用的 App，自動選擇適合的寫作風格 — 通訊�
 匯入音訊/影片檔案進行轉錄，支援進度追蹤。可匯出為 TXT 純文字或 SRT 字幕檔。
 
 ### 隱私優先
-- **BYOK**：音訊從你的裝置直接傳送至 API 服務商
+- **BYOK**：音訊從你的裝置直接傳送至所選服務商；Vertex 則經由你設定的私人 gateway
 - **無遙測、無分析、無使用者帳號**
 - API 金鑰以 Android Keystore 加密儲存
 - 僅需 2 個權限：`INTERNET` + `RECORD_AUDIO`
@@ -133,9 +139,9 @@ Whisper 支援 99 種語言的語音轉文字。VoxPen 目前提供 3 種語言 
 
 | 服務商 | 語音轉文字 | LLM | 備註 |
 |--------|-----------|-----|------|
-| **Groq** | Whisper large-v3-turbo | LLaMA、Qwen 等 | 有免費額度 |
+| **Groq** | Whisper large-v3（預設；仍可選 Turbo） | LLaMA、Qwen 等 | 有免費額度 |
 | **OpenAI** | Whisper、GPT-4o transcribe | GPT-4o 等 | |
-| **Anthropic** | — | Claude | 僅 LLM |
+| **Google Vertex** | — | Gemini 3.7 Flash（經私人 gateway） | ADC 憑證留在 gateway |
 | **自訂** | 任何 Whisper 相容端點 | 任何 OpenAI 相容端點 | 支援自架伺服器 |
 
 ## 開始使用
@@ -164,6 +170,10 @@ Debug APK 位於 `app/build/outputs/apk/debug/app-debug.apk`。
 2. 開啟 VoxPen → 輸入 API 金鑰
 3. 至 **設定 → 系統 → 鍵盤** 啟用 VoxPen Voice
 4. 在任何文字欄位切換至 VoxPen，開始說話
+
+### Vertex gateway 設定
+
+完整的 Android → gateway → Vertex 流程請見 [`vertex-gateway/README.md`](vertex-gateway/README.md)。在伺服器以環境變數與 ADC 設定 gateway，再只把 gateway 網址與 token 輸入 Android。請勿提交 `.env`、service-account JSON、私鑰或 token。
 
 ## 架構
 

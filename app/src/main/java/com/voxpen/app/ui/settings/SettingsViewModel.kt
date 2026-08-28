@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -56,6 +57,7 @@ class SettingsViewModel
                         p.key to apiKeyManager.isSttKeyConfigured(p)
                     },
                     customBaseUrl = apiKeyManager.getCustomBaseUrl() ?: "",
+                    vertexGatewayUrl = apiKeyManager.getVertexGatewayUrl() ?: "",
                 )
             }
             viewModelScope.launch {
@@ -173,8 +175,11 @@ class SettingsViewModel
 
         fun setSttProvider(provider: SttProvider) {
             viewModelScope.launch {
+                val currentModel = preferencesManager.sttModelFlow.first()
                 preferencesManager.setSttProvider(provider)
-                preferencesManager.setSttModel(provider.defaultModelId)
+                if (currentModel !in provider.models.map { it.id }) {
+                    preferencesManager.setSttModel(provider.defaultModelId)
+                }
             }
         }
 
@@ -252,6 +257,11 @@ class SettingsViewModel
             _uiState.update { it.copy(customBaseUrl = url) }
         }
 
+        fun setVertexGatewayUrl(url: String) {
+            apiKeyManager.setVertexGatewayUrl(url)
+            _uiState.update { it.copy(vertexGatewayUrl = url) }
+        }
+
         /**
          * Sends a minimal chat request to the current LLM provider to verify the
          * base URL / model / key configuration, mirroring desktop's
@@ -259,13 +269,14 @@ class SettingsViewModel
          */
         fun testLlmProvider() {
             val state = _uiState.value
-            val customBaseUrl =
-                if (state.llmProvider == LlmProvider.Custom) {
-                    state.customBaseUrl.ifBlank { null }
-                } else {
-                    null
-                }
-            if (state.llmProvider == LlmProvider.Custom && customBaseUrl == null) {
+            val customBaseUrl = when (state.llmProvider) {
+                LlmProvider.Custom -> state.customBaseUrl.ifBlank { null }
+                LlmProvider.Vertex -> state.vertexGatewayUrl.ifBlank { null }
+                else -> null
+            }
+            if ((state.llmProvider == LlmProvider.Custom || state.llmProvider == LlmProvider.Vertex) &&
+                customBaseUrl == null
+            ) {
                 _uiState.update { it.copy(llmTestStatus = LlmTestStatus.NoBaseUrl) }
                 return
             }

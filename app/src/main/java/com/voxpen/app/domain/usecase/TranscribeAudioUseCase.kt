@@ -16,7 +16,7 @@ class TranscribeAudioUseCase
             pcmData: ByteArray,
             language: SttLanguage,
             apiKey: String,
-            model: String = "whisper-large-v3-turbo",
+            model: String = "whisper-large-v3",
             vocabularyHint: String? = null,
             sampleRate: Int = SAMPLE_RATE,
             channels: Int = CHANNELS,

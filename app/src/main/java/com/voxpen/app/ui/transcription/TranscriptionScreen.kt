@@ -121,7 +121,7 @@ fun TranscriptionScreenContent(
                             null
                         }
                     val llmProvider = prefsManager.llmProviderFlow.first()
-                    val llmApiKey = apiKeyManager.getApiKey(llmProvider) ?: apiKeyManager.getGroqApiKey()
+                    val llmApiKey = apiKeyManager.getApiKey(llmProvider).orEmpty()
                     val llmModel =
                         if (llmProvider == LlmProvider.Custom) {
                             prefsManager.customLlmModelFlow.first().ifBlank { prefsManager.llmModelFlow.first() }
@@ -134,12 +134,11 @@ fun TranscriptionScreenContent(
                     val language = state.selectedLanguage
                     val langKey = PreferencesManager.languageToKey(language)
                     val customPrompt = prefsManager.customPromptFlow(langKey).first()
-                    val customLlmBaseUrl =
-                        if (llmProvider == LlmProvider.Custom) {
-                            apiKeyManager.getCustomBaseUrl()
-                        } else {
-                            null
-                        }
+                    val customLlmBaseUrl = when (llmProvider) {
+                        LlmProvider.Custom -> apiKeyManager.getCustomBaseUrl()
+                        LlmProvider.Vertex -> apiKeyManager.getVertexGatewayUrl()
+                        else -> null
+                    }
 
                     var entity: TranscriptionEntity? = null
                     var errorMsg: String? = null

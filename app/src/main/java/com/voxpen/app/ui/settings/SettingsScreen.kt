@@ -657,6 +657,7 @@ private fun LlmProviderSection(
         LlmProvider.Groq to "Groq",
         LlmProvider.OpenAI to "OpenAI",
         LlmProvider.OpenRouter to "OpenRouter",
+        LlmProvider.Vertex to "Google Vertex",
         LlmProvider.Custom to stringResource(R.string.provider_custom),
     )
     FlowRow(
@@ -674,16 +675,77 @@ private fun LlmProviderSection(
 
     Spacer(Modifier.height(12.dp))
 
-    if (state.llmProvider != LlmProvider.Groq) {
+    if (state.llmProvider != LlmProvider.Groq && state.llmProvider != LlmProvider.Vertex) {
         ProviderApiKeyField(state, viewModel)
         Spacer(Modifier.height(8.dp))
     }
 
-    if (state.llmProvider == LlmProvider.Custom) {
+    if (state.llmProvider == LlmProvider.Vertex) {
+        VertexProviderFields(state, viewModel)
+    } else if (state.llmProvider == LlmProvider.Custom) {
         CustomProviderFields(state, viewModel)
     } else {
         ProviderModelList(state, viewModel)
     }
+}
+
+@Composable
+private fun VertexProviderFields(
+    state: SettingsUiState,
+    viewModel: SettingsViewModel,
+) {
+    var tokenInput by remember { mutableStateOf("") }
+    OutlinedTextField(
+        value = state.vertexGatewayUrl,
+        onValueChange = { viewModel.setVertexGatewayUrl(it) },
+        label = { Text(stringResource(R.string.provider_vertex_gateway_url)) },
+        placeholder = { Text("https://your-gateway.example/v1") },
+        supportingText = { Text(stringResource(R.string.provider_vertex_gateway_url_hint)) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(8.dp))
+    if (state.providerApiKeys[LlmProvider.Vertex.key] == true) {
+        Text(
+            stringResource(R.string.provider_key_configured),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+    OutlinedTextField(
+        value = tokenInput,
+        onValueChange = { tokenInput = it },
+        label = { Text(stringResource(R.string.provider_vertex_gateway_token)) },
+        placeholder = { Text(stringResource(R.string.provider_vertex_gateway_token_hint)) },
+        visualTransformation = PasswordVisualTransformation(),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Button(
+        onClick = {
+            if (tokenInput.isNotBlank()) {
+                viewModel.saveProviderApiKey(LlmProvider.Vertex, tokenInput)
+                tokenInput = ""
+            }
+        },
+        modifier = Modifier.padding(top = 4.dp),
+    ) { Text(stringResource(R.string.settings_save)) }
+    Spacer(Modifier.height(8.dp))
+    ProviderModelList(state, viewModel)
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(
+        onClick = { viewModel.testLlmProvider() },
+        enabled = state.llmTestStatus != LlmTestStatus.Testing,
+    ) {
+        Text(
+            if (state.llmTestStatus == LlmTestStatus.Testing) {
+                stringResource(R.string.provider_testing)
+            } else {
+                stringResource(R.string.provider_test_vertex)
+            },
+        )
+    }
+    ProviderTestStatus(state)
 }
 
 @Composable
@@ -812,11 +874,45 @@ private fun CustomProviderFields(
     }
 }
 
+@Composable
+private fun ProviderTestStatus(state: SettingsUiState) {
+    when (val status = state.llmTestStatus) {
+        LlmTestStatus.Idle,
+        LlmTestStatus.Testing,
+        -> Unit
+
+        is LlmTestStatus.Success ->
+            Text(
+                stringResource(R.string.provider_test_ok, status.detail),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+
+        is LlmTestStatus.Error ->
+            Text(
+                stringResource(R.string.provider_test_failed, status.message),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+
+        LlmTestStatus.NoBaseUrl ->
+            Text(
+                stringResource(R.string.provider_test_no_url),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+    }
+}
+
 private fun providerDisplayName(provider: LlmProvider): String =
     when (provider) {
         LlmProvider.Groq -> "Groq"
         LlmProvider.OpenAI -> "OpenAI"
         LlmProvider.OpenRouter -> "OpenRouter"
+        LlmProvider.Vertex -> "Google Vertex"
         LlmProvider.Custom -> "Custom"
     }
 

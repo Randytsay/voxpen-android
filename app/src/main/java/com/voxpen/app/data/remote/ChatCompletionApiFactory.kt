@@ -20,7 +20,7 @@ class ChatCompletionApiFactory
         private val cache = ConcurrentHashMap<String, ChatCompletionApi>()
 
         fun create(provider: LlmProvider): ChatCompletionApi {
-            require(provider.baseUrl.isNotBlank()) { "Use createForCustom() for Custom provider" }
+            require(provider.baseUrl.isNotBlank()) { "Use createForCustom() for gateway provider" }
             return cache.getOrPut(provider.key) {
                 buildApi(provider.baseUrl)
             }

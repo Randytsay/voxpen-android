@@ -9,6 +9,9 @@ object ImePrivacyPolicy {
     fun shouldUseCorrectionMemory(inputType: Int): Boolean =
         !isSensitiveInput(inputType)
 
+    fun shouldUseContext(inputType: Int): Boolean =
+        !isSensitiveInput(inputType)
+
     fun isSensitiveInput(inputType: Int): Boolean {
         val variation = inputType and InputType.TYPE_MASK_VARIATION
         val inputClass = inputType and InputType.TYPE_MASK_CLASS

@@ -20,6 +20,7 @@ import android.widget.PopupWindow
 import android.widget.ProgressBar
 import android.widget.TextView
 import com.voxpen.app.R
+import com.voxpen.app.data.local.ContextMemoryManager
 import com.voxpen.app.data.local.PersonalLearningPreferences
 import com.voxpen.app.data.local.PreferencesManager
 import com.voxpen.app.data.model.RecordingMode
@@ -50,6 +51,10 @@ class VoxPenIME : InputMethodService() {
     private lateinit var apiKeyManager: com.voxpen.app.data.local.ApiKeyManager
     private lateinit var correctionMemoryRepository: CorrectionMemoryRepository
     private lateinit var personalLearningPreferences: PersonalLearningPreferences
+    private lateinit var contextMemoryManager: ContextMemoryManager
+
+    private var currentEditorPackageName: String = ""
+    private var currentEditorInputType: Int = 0
 
     private var isEditMode: Boolean = false
     @Volatile private var effectiveTone: ToneStyle = ToneStyle.DEFAULT
@@ -130,6 +135,7 @@ class VoxPenIME : InputMethodService() {
         apiKeyManager = entryPoint.apiKeyManager()
         correctionMemoryRepository = entryPoint.correctionMemoryRepository()
         personalLearningPreferences = entryPoint.personalLearningPreferences()
+        contextMemoryManager = entryPoint.contextMemoryManager()
         recordingController =
             RecordingController(
                 transcribeUseCase = entryPoint.transcribeAudioUseCase(),
@@ -143,6 +149,7 @@ class VoxPenIME : InputMethodService() {
                 proStatusProvider = { proStatusResolver.proStatus.value },
                 ioDispatcher = Dispatchers.IO,
                 correctionMemoryRepository = correctionMemoryRepository,
+                contextMemoryManager = contextMemoryManager,
                 messages =
                     object : RecordingMessages {
                         override fun apiKeyNotConfigured(): String = getString(R.string.provider_key_required)
@@ -333,16 +340,22 @@ class VoxPenIME : InputMethodService() {
         serviceScope.launch {
             val language = preferencesManager.languageFlow.first()
             val editorInfo = currentInputEditorInfo
+            val packageName = editorInfo?.packageName.orEmpty()
+            val inputType = editorInfo?.inputType ?: 0
+            currentEditorPackageName = packageName
+            currentEditorInputType = inputType
             recordingController.onStopRecording(
                 stopRecording = { audioRecorder.stopRecording() },
                 language = language,
                 editMode = isEditMode,
                 toneOverride = effectiveTone,
-                packageName = editorInfo?.packageName.orEmpty(),
+                packageName = packageName,
                 allowCorrectionMemory =
                     ImePrivacyPolicy.shouldUseCorrectionMemory(
-                        editorInfo?.inputType ?: 0,
+                        inputType,
                     ),
+                contextPackageName = packageName,
+                useContext = ImePrivacyPolicy.shouldUseContext(inputType),
             )
         }
     }
@@ -555,6 +568,15 @@ class VoxPenIME : InputMethodService() {
         val committed = runCatching { connection.commitText(text, 1) }.getOrDefault(false)
         if (committed) {
             rememberCommittedText(text)
+            val packageName = currentEditorPackageName
+            val inputType = currentEditorInputType
+            if (packageName.isNotBlank() && ImePrivacyPolicy.shouldUseContext(inputType)) {
+                serviceScope.launch {
+                    runCatching {
+                        contextMemoryManager.append(packageName, text)
+                    }.onFailure { Timber.w(it, "context_memory_append_failed") }
+                }
+            }
             recordingController.dismiss()
         }
         return committed
@@ -840,12 +862,11 @@ class VoxPenIME : InputMethodService() {
                 } else {
                     preferencesManager.llmModelFlow.first()
                 }
-            val customBaseUrl =
-                if (llmProvider == com.voxpen.app.data.model.LlmProvider.Custom) {
-                    apiKeyManager.getCustomBaseUrl()
-                } else {
-                    null
-                }
+            val customBaseUrl = when (llmProvider) {
+                com.voxpen.app.data.model.LlmProvider.Custom -> apiKeyManager.getCustomBaseUrl()
+                com.voxpen.app.data.model.LlmProvider.Vertex -> apiKeyManager.getVertexGatewayUrl()
+                else -> null
+            }
 
             val result =
                 editTextUseCase(
@@ -1080,7 +1101,7 @@ class VoxPenIME : InputMethodService() {
     }
 
     companion object {
-        private const val MAX_RECORDING_SECONDS = 360L // 6 minutes
+        private const val MAX_RECORDING_SECONDS = 600L // 10 minutes
     }
 
     private fun launchSettings() {
@@ -1098,6 +1119,8 @@ class VoxPenIME : InputMethodService() {
         restarting: Boolean,
     ) {
         super.onStartInput(info, restarting)
+        currentEditorPackageName = info.packageName.orEmpty()
+        currentEditorInputType = info.inputType
         if (autoToneEnabled) {
             val detected =
                 AppToneDetector.detect(

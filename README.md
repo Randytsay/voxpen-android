@@ -41,12 +41,12 @@
 
 ## What is VoxPen?
 
-VoxPen is an Android voice keyboard that transcribes your speech with Whisper, refines it with an LLM, and inserts clean text into any app. It runs on a **BYOK (Bring Your Own Key)** model — you use your own API keys and pay only for what you use. No subscription, no data collection, fully open-source.
+VoxPen is an Android voice keyboard that transcribes your speech with Whisper, refines it with an LLM, and inserts clean text into any app. It runs on a **BYOK (Bring Your Own Key)** model — you use your own API keys and pay only for what you use. No subscription, no telemetry, fully open-source.
 
 ## Features
 
 ### Voice Dictation
-Tap the mic and speak. VoxPen sends audio to Whisper for transcription, optionally refines with an LLM, and shows the result in the candidate bar. By default, tap a candidate to insert it; you can enable Automatic Result Insertion to insert the final result automatically.
+Tap the mic and speak. VoxPen records 16 kHz mono 16-bit PCM, uploads 60-second chunks to Whisper, optionally refines with an LLM, and shows the result in the candidate bar. Each recording can last up to 10 minutes. By default, tap a candidate to insert it; you can enable Automatic Result Insertion to insert the final result automatically.
 
 ### Automatic Result Insertion
 Enable **Settings → Automatic Result Insertion** to place completed recognition text directly into the active text field:
@@ -60,7 +60,13 @@ Enable **Settings → Automatic Result Insertion** to place completed recognitio
 When the setting is off, the existing candidate-bar workflow remains unchanged.
 
 ### Custom Vocabulary
-Add names, places, and specialized terms in the Dictionary. Star important entries to prioritize them in recognition and LLM refinement prompts; recent dictionary entries are also supplied to the voice pipeline, subject to the provider token budget. Free users can store up to 10 dictionary entries, while Pro builds support unlimited entries.
+Add names, places, and specialized terms in the Dictionary. Star important entries to prioritize them in recognition and LLM refinement prompts. Whisper receives important terms first within its approximately 200-token hint budget; the LLM receives separate important and relevant-term sections plus up to five recent committed inputs for the current app. Free users can store up to 10 dictionary entries, while Pro builds support unlimited entries.
+
+### Context Memory
+After a successful text commit, VoxPen keeps up to five short entries per target app locally in DataStore. Context is isolated by package name, is used only as reference for the next refinement, and is excluded for password input fields. Failed, blank, command, and edit-instruction flows are not stored.
+
+### Google Vertex Gemini
+The Android app supports **Google Vertex** through the private gateway in [`vertex-gateway/`](vertex-gateway/). Select Google Vertex in Settings, enter your gateway `/v1` URL and gateway token, and keep Google ADC credentials on the gateway host. The app sends model `google/gemini-3.7-flash`, `reasoning_effort=low`, and `max_tokens=4096`; it does not contain a service-account key or Google credential.
 
 ### Translation Mode
 Speak in one language, output in another. Quick-switch target languages directly from the keyboard — no need to open Settings.
@@ -78,7 +84,7 @@ VoxPen detects the active app and auto-selects the appropriate writing style —
 Transcribe audio/video files with progress tracking. Export as TXT or SRT subtitles.
 
 ### Privacy-First
-- **BYOK**: Audio goes directly from your device to your API provider
+- **BYOK**: Audio goes directly from your device to your selected provider; Vertex calls go through your configured private gateway
 - **No telemetry**, no analytics, no user accounts
 - API keys encrypted with Android Keystore
 - Only 2 permissions: `INTERNET` + `RECORD_AUDIO`
@@ -133,9 +139,9 @@ Whisper supports 99 languages for STT. VoxPen currently exposes 3 + auto-detect 
 
 | Provider | STT | LLM | Notes |
 |----------|-----|-----|-------|
-| **Groq** | Whisper large-v3-turbo | LLaMA, Qwen, etc. | Free tier available |
+| **Groq** | Whisper large-v3 (default; Turbo remains selectable) | LLaMA, Qwen, etc. | Free tier available |
 | **OpenAI** | Whisper, GPT-4o transcribe | GPT-4o, etc. | |
-| **Anthropic** | — | Claude | LLM only |
+| **Google Vertex** | — | Gemini 3.7 Flash via private gateway | ADC credentials stay on gateway |
 | **Custom** | Any Whisper-compatible endpoint | Any OpenAI-compatible endpoint | Self-hosted support |
 
 ## Getting Started
@@ -164,6 +170,10 @@ The debug APK will be at `app/build/outputs/apk/debug/app-debug.apk`.
 2. Open VoxPen → enter your API key
 3. Enable VoxPen Voice in **Settings → System → Keyboard**
 4. Switch to VoxPen in any text field and start speaking
+
+### Vertex gateway setup
+
+See [`vertex-gateway/README.md`](vertex-gateway/README.md) for the complete Android → gateway → Vertex flow. Configure the gateway with environment variables and ADC on the server, then enter only the gateway URL and token in Android. Never commit `.env` files, service-account JSON, private keys, or tokens.
 
 ## Architecture
 

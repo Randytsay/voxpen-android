@@ -17,6 +17,27 @@ object RefinementPrompt {
         return base + VocabularyPromptBuilder.buildLlmSuffix(language, vocabulary)
     }
 
+    fun forLanguageWithContext(
+        language: SttLanguage,
+        importantTerms: List<String>,
+        relevantTerms: List<String>,
+        recentContext: List<String>,
+        customPrompt: String? = null,
+        tone: ToneStyle = ToneStyle.Casual,
+    ): String {
+        val base = when {
+            customPrompt?.isNotBlank() == true -> customPrompt
+            tone == ToneStyle.Custom -> defaultForLanguage(language)
+            else -> forLanguageAndTone(language, tone)
+        }
+        return base + VocabularyPromptBuilder.buildLlmContextSuffix(
+            language = language,
+            importantTerms = importantTerms,
+            relevantTerms = relevantTerms,
+            recentContext = recentContext,
+        )
+    }
+
     fun forLanguageAndTone(language: SttLanguage, tone: ToneStyle): String =
         when (tone) {
             ToneStyle.Custom -> defaultForLanguage(language)

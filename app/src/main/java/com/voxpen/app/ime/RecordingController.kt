@@ -3,9 +3,11 @@ package com.voxpen.app.ime
 import com.voxpen.app.billing.ProStatus
 import com.voxpen.app.billing.UsageLimiter
 import com.voxpen.app.data.local.ApiKeyManager
+import com.voxpen.app.data.local.ContextMemoryManager
 import com.voxpen.app.data.local.PreferencesManager
 import com.voxpen.app.data.local.RecordingStore
 import com.voxpen.app.data.model.LlmProvider
+import com.voxpen.app.data.model.RefinementContext
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.SttProvider
 import com.voxpen.app.data.model.ToneStyle
@@ -16,6 +18,7 @@ import com.voxpen.app.domain.usecase.RefineTextUseCase
 import com.voxpen.app.domain.usecase.TranscribeAudioUseCase
 import com.voxpen.app.util.RecordingValidator
 import com.voxpen.app.util.VocabularyPromptBuilder
+import com.voxpen.app.util.VocabularySelector
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +43,7 @@ class RecordingController(
     private val ioDispatcher: CoroutineDispatcher,
     private val correctionMemoryRepository: CorrectionMemoryRepository? = null,
     private val messages: RecordingMessages = RecordingMessages.English,
+    private val contextMemoryManager: ContextMemoryManager? = null,
 ) {
     private val scope =
         CoroutineScope(
@@ -181,6 +185,8 @@ class RecordingController(
         toneOverride: ToneStyle? = null,
         packageName: String = "",
         allowCorrectionMemory: Boolean = true,
+        contextPackageName: String? = null,
+        useContext: Boolean = false,
     ) {
         val pcmData =
             stopRecording()
@@ -242,27 +248,21 @@ class RecordingController(
             val proStatus =
                 proStatusProvider()
 
-            val importantVocabulary =
-                preferencesManager
-                    .importantWordsFlow
-                    .first()
-
             val recentVocabulary =
                 dictionaryRepository
                     .getWords(500)
 
-            // Preserve recent order for important terms instead of sorting all important terms alphabetically.
-            val prioritizedImportant =
-                recentVocabulary.filter { it in importantVocabulary } +
-                    importantVocabulary
-                        .filterNot { it in recentVocabulary }
-                        .sorted()
-
+            val importantWords = preferencesManager.importantWordsFlow.first()
+            val importantVocabulary =
+                VocabularySelector.prioritizeImportant(
+                    importantWords = importantWords,
+                    recentVocabulary = recentVocabulary,
+                )
             val ordinaryVocabulary =
-                recentVocabulary.filterNot { it in importantVocabulary }
+                recentVocabulary.filterNot { it in importantWords }
 
             val vocabulary =
-                (prioritizedImportant + ordinaryVocabulary).distinct()
+                (importantVocabulary + ordinaryVocabulary).distinct()
 
             val whisperPrompt =
                 if (vocabulary.isNotEmpty()) {
@@ -362,8 +362,25 @@ class RecordingController(
                             .incrementRefinement()
                     }
 
-                    val allVocabulary =
-                        vocabulary
+                    val relevantVocabulary = VocabularySelector.selectRelevant(
+                        transcription = originalText,
+                        ordinaryVocabulary = ordinaryVocabulary,
+                    )
+                    val recentContext = if (
+                        useContext &&
+                        !contextPackageName.isNullOrBlank() &&
+                        contextMemoryManager != null
+                    ) {
+                        contextMemoryManager.getRecentInputs(contextPackageName)
+                    } else {
+                        emptyList()
+                    }
+                    val refinementContext = RefinementContext(
+                        importantTerms = importantVocabulary,
+                        relevantTerms = relevantVocabulary,
+                        recentContext = recentContext,
+                    )
+                    val allVocabulary = vocabulary
 
                     val langKey =
                         PreferencesManager
@@ -379,10 +396,7 @@ class RecordingController(
                             .first()
 
                     val resolvedModel =
-                        if (
-                            llmProvider ==
-                            LlmProvider.Custom
-                        ) {
+                        if (llmProvider == LlmProvider.Custom) {
                             customLlmModel
                                 .ifBlank {
                                     llmModel
@@ -392,14 +406,10 @@ class RecordingController(
                         }
 
                     val customBaseUrl =
-                        if (
-                            llmProvider ==
-                            LlmProvider.Custom
-                        ) {
-                            apiKeyManager
-                                .getCustomBaseUrl()
-                        } else {
-                            null
+                        when (llmProvider) {
+                            LlmProvider.Custom -> apiKeyManager.getCustomBaseUrl()
+                            LlmProvider.Vertex -> apiKeyManager.getVertexGatewayUrl()
+                            else -> null
                         }
 
                     val llmApiKey =
@@ -423,6 +433,7 @@ class RecordingController(
                             translationEnabled = translationEnabled,
                             targetLanguage = translationTargetLanguage,
                             correctionHints = correctionHints,
+                            refinementContext = refinementContext,
                         )
 
                     _uiState.value =

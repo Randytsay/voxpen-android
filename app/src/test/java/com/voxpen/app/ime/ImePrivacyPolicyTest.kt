@@ -48,4 +48,14 @@ class ImePrivacyPolicyTest {
 
         assertThat(ImePrivacyPolicy.shouldLearnFromInput(inputType)).isFalse()
     }
+
+    @Test
+    fun `context memory follows the same privacy policy`() {
+        assertThat(ImePrivacyPolicy.shouldUseContext(InputType.TYPE_CLASS_TEXT)).isTrue()
+        assertThat(
+            ImePrivacyPolicy.shouldUseContext(
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            ),
+        ).isFalse()
+    }
 }

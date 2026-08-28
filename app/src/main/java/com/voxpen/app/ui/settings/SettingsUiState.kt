@@ -22,6 +22,7 @@ data class SettingsUiState(
     val llmProvider: LlmProvider = LlmProvider.DEFAULT,
     val customLlmModel: String = "",
     val customBaseUrl: String = "",
+    val vertexGatewayUrl: String = "",
     val customSttBaseUrl: String = "",
     val providerApiKeys: Map<String, Boolean> = emptyMap(),
     val sttProviderApiKeys: Map<String, Boolean> = emptyMap(),

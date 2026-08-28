@@ -13,9 +13,10 @@ data class ChatMessage(
 data class ChatCompletionRequest(
     val model: String,
     val messages: List<ChatMessage>,
-    val temperature: Double = 0.3,
+    val temperature: Double? = 0.3,
     @SerialName("max_tokens") val maxTokens: Int = 4096,
     @SerialName("reasoning_format") val reasoningFormat: String? = null,
+    @SerialName("reasoning_effort") val reasoningEffort: String? = null,
 )
 
 @Serializable

@@ -2,6 +2,7 @@ package com.voxpen.app.data.repository
 
 import com.google.common.truth.Truth.assertThat
 import com.voxpen.app.data.model.LlmProvider
+import com.voxpen.app.data.model.RefinementContext
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.remote.ChatCompletionApiFactory
 import kotlinx.coroutines.test.runTest
@@ -350,5 +351,69 @@ class LlmRepositoryTest {
             val body = request.body.readUtf8()
             assertThat(body).contains("speech")
             assertThat(body).contains("literal speech")
+        }
+
+    @Test
+    fun `Vertex sends gateway request without temperature`() =
+        runTest {
+            enqueueSuccess("ok")
+            repository.refine(
+                text = "raw text",
+                language = SttLanguage.English,
+                apiKey = "gateway-token",
+                model = "google/gemini-3.7-flash",
+                provider = LlmProvider.Vertex,
+                customBaseUrl = server.url("/").toString(),
+                refinementContext = RefinementContext(
+                    importantTerms = listOf("VoxPen"),
+                    relevantTerms = listOf("keyboard"),
+                    recentContext = listOf("previous text"),
+                ),
+            )
+            val request = server.takeRequest()
+            val body = request.body.readUtf8()
+            assertThat(request.getHeader("Authorization")).isEqualTo("Bearer gateway-token")
+            assertThat(body).contains("\"model\":\"google/gemini-3.7-flash\"")
+            assertThat(body).contains("\"max_tokens\":4096")
+            assertThat(body).contains("\"reasoning_effort\":\"low\"")
+            assertThat(body).doesNotContain("temperature")
+            assertThat(body).doesNotContain("reasoning_format")
+            assertThat(body).contains("<important_terms>")
+            assertThat(body).contains("<relevant_terms>")
+            assertThat(body).contains("<recent_context>")
+        }
+
+    @Test
+    fun `ordinary providers retain temperature`() =
+        runTest {
+            enqueueSuccess("ok")
+            repository.refine(
+                text = "text",
+                language = SttLanguage.English,
+                apiKey = "key",
+                provider = LlmProvider.Custom,
+                customBaseUrl = server.url("/").toString(),
+            )
+            assertThat(server.takeRequest().body.readUtf8()).contains("\"temperature\":0.3")
+        }
+
+    @Test
+    fun `malformed provider response returns failure for caller fallback`() =
+        runTest {
+            server.enqueue(
+                MockResponse()
+                    .setBody("not-json")
+                    .setHeader("Content-Type", "application/json"),
+            )
+
+            val result = repository.refine(
+                text = "raw text",
+                language = SttLanguage.English,
+                apiKey = "gateway-token",
+                provider = LlmProvider.Vertex,
+                customBaseUrl = server.url("/").toString(),
+            )
+
+            assertThat(result.isFailure).isTrue()
         }
 }

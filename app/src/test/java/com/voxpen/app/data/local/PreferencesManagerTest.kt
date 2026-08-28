@@ -51,8 +51,8 @@ class PreferencesManagerTest {
     }
 
     @Test
-    fun `default STT model should be whisper-large-v3-turbo`() {
-        assertThat(PreferencesManager.DEFAULT_STT_MODEL).isEqualTo("whisper-large-v3-turbo")
+    fun `default STT model should be whisper-large-v3`() {
+        assertThat(PreferencesManager.DEFAULT_STT_MODEL).isEqualTo("whisper-large-v3")
     }
 
     @Test

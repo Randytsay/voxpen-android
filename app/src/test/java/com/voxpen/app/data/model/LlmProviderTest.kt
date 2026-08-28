@@ -15,6 +15,7 @@ class LlmProviderTest {
         assertThat(LlmProvider.fromKey("groq")).isEqualTo(LlmProvider.Groq)
         assertThat(LlmProvider.fromKey("openai")).isEqualTo(LlmProvider.OpenAI)
         assertThat(LlmProvider.fromKey("openrouter")).isEqualTo(LlmProvider.OpenRouter)
+        assertThat(LlmProvider.fromKey("vertex")).isEqualTo(LlmProvider.Vertex)
         assertThat(LlmProvider.fromKey("custom")).isEqualTo(LlmProvider.Custom)
     }
 
@@ -41,6 +42,13 @@ class LlmProviderTest {
     @Test
     fun `OpenRouter should have correct base URL`() {
         assertThat(LlmProvider.OpenRouter.baseUrl).isEqualTo("https://openrouter.ai/api/")
+    }
+
+    @Test
+    fun `Vertex should expose the requested OpenAI compatible model`() {
+        assertThat(LlmProvider.Vertex.baseUrl).isEmpty()
+        assertThat(LlmProvider.Vertex.defaultModelId).isEqualTo("google/gemini-3.7-flash")
+        assertThat(LlmProvider.Vertex.models.single().isDefault).isTrue()
     }
 
     @Test

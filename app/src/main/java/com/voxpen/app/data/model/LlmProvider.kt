@@ -46,6 +46,19 @@ sealed class LlmProvider(
         ),
     )
 
+    data object Vertex : LlmProvider(
+        key = "vertex",
+        baseUrl = "",
+        models = listOf(
+            LlmModelOption(
+                "google/gemini-3.7-flash",
+                "Gemini 3.7 Flash",
+                tag = "recommended",
+                isDefault = true,
+            ),
+        ),
+    )
+
     data object Custom : LlmProvider(
         key = "custom",
         baseUrl = "",
@@ -54,13 +67,14 @@ sealed class LlmProvider(
 
     companion object {
         val DEFAULT: LlmProvider get() = Groq
-        val all: List<LlmProvider> get() = listOf(Groq, OpenAI, OpenRouter, Custom)
+        val all: List<LlmProvider> get() = listOf(Groq, OpenAI, OpenRouter, Vertex, Custom)
 
         fun fromKey(key: String): LlmProvider =
             when (key) {
                 "groq" -> Groq
                 "openai" -> OpenAI
                 "openrouter" -> OpenRouter
+                "vertex" -> Vertex
                 "custom" -> Custom
                 else -> DEFAULT
             }

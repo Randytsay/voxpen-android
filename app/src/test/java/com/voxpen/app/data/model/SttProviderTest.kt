@@ -8,7 +8,7 @@ class SttProviderTest {
     fun `providers expose correct keys and defaults`() {
         assertThat(SttProvider.Groq.key).isEqualTo("groq")
         assertThat(SttProvider.Groq.baseUrl).isEqualTo("https://api.groq.com/openai/")
-        assertThat(SttProvider.Groq.defaultModelId).isEqualTo("whisper-large-v3-turbo")
+        assertThat(SttProvider.Groq.defaultModelId).isEqualTo("whisper-large-v3")
 
         assertThat(SttProvider.OpenAI.key).isEqualTo("openai")
         assertThat(SttProvider.OpenAI.baseUrl).isEqualTo("https://api.openai.com/")
@@ -32,5 +32,14 @@ class SttProviderTest {
         assertThat(SttProvider.fromKey("openai")).isEqualTo(SttProvider.OpenAI)
         assertThat(SttProvider.fromKey("custom")).isEqualTo(SttProvider.Custom)
         assertThat(SttProvider.fromKey("unknown")).isEqualTo(SttProvider.Groq)
+    }
+
+    @Test
+    fun `Groq keeps explicit turbo as an available non-default model`() {
+        assertThat(SttProvider.Groq.models.map { it.id }).containsExactly(
+            "whisper-large-v3",
+            "whisper-large-v3-turbo",
+        ).inOrder()
+        assertThat(SttProvider.Groq.models.last().isDefault).isFalse()
     }
 }

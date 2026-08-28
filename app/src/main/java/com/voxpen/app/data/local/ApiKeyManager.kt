@@ -86,6 +86,16 @@ class ApiKeyManager
             }
         }
 
+        // --- Vertex gateway URL (the gateway token itself uses the encrypted provider key) ---
+        fun getVertexGatewayUrl(): String? = encryptedPrefs.getString(KEY_VERTEX_GATEWAY_URL, null)
+
+        fun setVertexGatewayUrl(url: String?) {
+            encryptedPrefs.edit().apply {
+                if (url != null) putString(KEY_VERTEX_GATEWAY_URL, url) else remove(KEY_VERTEX_GATEWAY_URL)
+                apply()
+            }
+        }
+
         // --- Custom STT base URL ---
         fun getCustomSttBaseUrl(): String? =
             encryptedPrefs.getString(KEY_CUSTOM_STT_BASE_URL, null)
@@ -102,6 +112,7 @@ class ApiKeyManager
             private const val KEY_PREFIX = "api_key_"
             private const val STT_KEY_PREFIX = "stt_api_key_"
             private const val KEY_CUSTOM_BASE_URL = "custom_llm_base_url"
+            private const val KEY_VERTEX_GATEWAY_URL = "vertex_gateway_url"
             private const val KEY_CUSTOM_STT_BASE_URL = "custom_stt_base_url"
         }
     }

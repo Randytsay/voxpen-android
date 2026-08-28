@@ -96,6 +96,19 @@ class ApiKeyManagerTest {
     }
 
     @Test
+    fun `getApiKey for Vertex uses encrypted provider-specific key`() {
+        every { sharedPreferences.getString("api_key_vertex", null) } returns "gateway-token"
+        assertThat(manager.getApiKey(LlmProvider.Vertex)).isEqualTo("gateway-token")
+    }
+
+    @Test
+    fun `setVertexGatewayUrl stores the gateway URL separately`() {
+        manager.setVertexGatewayUrl("https://gateway.example/v1")
+        verify { editor.putString("vertex_gateway_url", "https://gateway.example/v1") }
+        verify { editor.apply() }
+    }
+
+    @Test
     fun `setApiKey for Groq delegates to setGroqApiKey`() {
         manager.setApiKey(LlmProvider.Groq, "gsk_new")
         verify { editor.putString("groq_api_key", "gsk_new") }

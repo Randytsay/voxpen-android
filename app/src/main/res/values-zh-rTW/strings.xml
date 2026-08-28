@@ -134,7 +134,7 @@
     <string name="onboarding_tip_language">長按 \uD83C\uDF10 選擇其他鍵盤</string>
     <string name="onboarding_tip_refinement">長按 \u2699 開啟快速設定——切換語言、開關潤稿、翻譯、編輯模式</string>
     <string name="onboarding_tip_tone">點擊語氣按鈕（\uD83D\uDCAC）切換寫作風格</string>
-    <string name="onboarding_tip_recording_limit">每次錄音最長 6 分鐘，最後 30 秒會顯示倒數提示。</string>
+    <string name="onboarding_tip_recording_limit">每次錄音最長 10 分鐘，最後 30 秒會顯示倒數提示。</string>
     <string name="onboarding_tip_voice_commands">說出指令詞可直接觸發鍵盤動作——「送出」/「送信」送出訊息、「刪除」/「削除」退格、「換行」/「改行」換行，不需插入文字。</string>
     <string name="onboarding_tip_speak_to_edit">在任意 App 中選取文字，長按 \u2699 → ✏️ 編輯模式 → 點麥克風說明修改方式，LLM 會直接替換選取內容。</string>
 
@@ -270,10 +270,15 @@
     <string name="provider_custom">自訂（LiteLLM / Ollama）</string>
     <string name="provider_key_configured">API 金鑰已設定 ✓</string>
     <string name="provider_api_key_hint">%1$s API 金鑰</string>
+    <string name="provider_vertex_gateway_url">Vertex Gateway 網址</string>
+    <string name="provider_vertex_gateway_url_hint">輸入結尾為 /v1 的私人 gateway 網址（App 不會儲存 Google 憑證）。</string>
+    <string name="provider_vertex_gateway_token">Gateway Token</string>
+    <string name="provider_vertex_gateway_token_hint">在 gateway 設定的 Bearer Token</string>
     <string name="provider_custom_base_url">伺服器網址</string>
     <string name="provider_custom_base_url_hint">API 端點位址（例如 LiteLLM、Ollama 或其他 OpenAI-compatible server）</string>
     <string name="provider_custom_model">模型名稱</string>
     <string name="provider_test">測試供應商</string>
+    <string name="provider_test_vertex">測試 Vertex 供應商</string>
     <string name="provider_testing">測試中…</string>
     <string name="provider_test_ok">供應商可用。%1$s</string>
     <string name="provider_test_failed">失敗：%1$s</string>

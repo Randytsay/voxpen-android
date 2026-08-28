@@ -10,6 +10,7 @@ class ChatCompletionTest {
         Json {
             ignoreUnknownKeys = true
             encodeDefaults = true
+            explicitNulls = false
         }
 
     @Test
@@ -33,6 +34,23 @@ class ChatCompletionTest {
         assertThat(encoded).contains("\"model\":\"llama-3.3-70b-versatile\"")
         assertThat(encoded).contains("\"temperature\":0.3")
         assertThat(encoded).contains("\"max_tokens\":2048")
+    }
+
+    @Test
+    fun `Vertex request omits temperature and carries low reasoning effort`() {
+        val request = ChatCompletionRequest(
+            model = "google/gemini-3.7-flash",
+            messages = listOf(ChatMessage("user", "hello")),
+            temperature = null,
+            maxTokens = 4096,
+            reasoningEffort = "low",
+        )
+
+        val encoded = json.encodeToString(request)
+
+        assertThat(encoded).doesNotContain("temperature")
+        assertThat(encoded).contains("\"reasoning_effort\":\"low\"")
+        assertThat(encoded).contains("\"max_tokens\":4096")
     }
 
     @Test

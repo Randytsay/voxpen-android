@@ -63,6 +63,7 @@ class SettingsViewModelTest {
         every { preferencesManager.recordingModeFlow } returns flowOf(RecordingMode.TAP_TO_TOGGLE)
         every { preferencesManager.refinementEnabledFlow } returns flowOf(true)
         every { preferencesManager.autoInsertResultFlow } returns autoInsertResultFlow
+        every { preferencesManager.sttModelFlow } returns flowOf(PreferencesManager.DEFAULT_STT_MODEL)
         every { preferencesManager.llmProviderFlow } returns flowOf(LlmProvider.Groq)
         every { preferencesManager.customLlmModelFlow } returns flowOf("")
         every { proStatusResolver.proStatus } returns proStatusFlow
@@ -243,6 +244,38 @@ class SettingsViewModelTest {
             val vm = createViewModel()
             vm.setLlmProvider(LlmProvider.Groq)
             coVerify { preferencesManager.setLlmModel(LlmProvider.Groq.defaultModelId) }
+        }
+
+    @Test
+    fun `setSttProvider preserves an explicitly selected Groq turbo model`() =
+        runTest {
+            every { preferencesManager.sttModelFlow } returns flowOf("whisper-large-v3-turbo")
+            val vm = createViewModel()
+
+            vm.setSttProvider(com.voxpen.app.data.model.SttProvider.Groq)
+            advanceUntilIdle()
+
+            coVerify { preferencesManager.setSttProvider(com.voxpen.app.data.model.SttProvider.Groq) }
+            coVerify(exactly = 0) { preferencesManager.setSttModel(any()) }
+        }
+
+    @Test
+    fun `Vertex provider test uses configured gateway`() =
+        runTest {
+            every { preferencesManager.llmProviderFlow } returns flowOf(LlmProvider.Vertex)
+            every { preferencesManager.llmModelFlow } returns flowOf("google/gemini-3.7-flash")
+            every { apiKeyManager.getVertexGatewayUrl() } returns "http://vertex-gateway.test/v1"
+            every { apiKeyManager.getApiKey(LlmProvider.Vertex) } returns "gateway-token"
+            every { apiFactory.createForCustom("http://vertex-gateway.test/v1") } returns chatCompletionApi
+            coEvery { chatCompletionApi.chatCompletion(any(), any()) } returns
+                ChatCompletionResponse(choices = listOf(ChatChoice(message = ChatMessage("assistant", "ok"))))
+            val vm = createViewModel()
+
+            vm.testLlmProvider()
+            advanceUntilIdle()
+
+            verify { apiFactory.createForCustom("http://vertex-gateway.test/v1") }
+            assertThat(vm.uiState.value.llmTestStatus).isEqualTo(LlmTestStatus.Success("ok"))
         }
 
     @Test

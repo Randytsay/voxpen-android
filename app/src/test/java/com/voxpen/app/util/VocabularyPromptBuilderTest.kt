@@ -86,6 +86,24 @@ class VocabularyPromptBuilderTest {
     }
 
     @Test
+    fun `should keep important and relevant terms in separate tagged sections`() {
+        val result = VocabularyPromptBuilder.buildLlmContextSuffix(
+            language = SttLanguage.Chinese,
+            importantTerms = listOf("正式詞"),
+            relevantTerms = listOf("相關詞"),
+            recentContext = listOf("上一段已插入文字"),
+        )
+
+        assertThat(result).contains("<important_terms>")
+        assertThat(result).contains("正式詞")
+        assertThat(result).contains("<relevant_terms>")
+        assertThat(result).contains("相關詞")
+        assertThat(result).contains("<recent_context>")
+        assertThat(result).contains("上一段已插入文字")
+        assertThat(result).contains("Only edit the text inside <speech>")
+    }
+
+    @Test
     fun `should estimate CJK tokens as roughly 2 per char`() {
         val tokens = VocabularyPromptBuilder.estimateTokens("語墨")
         assertThat(tokens).isEqualTo(4)

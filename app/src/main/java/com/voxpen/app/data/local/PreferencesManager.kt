@@ -467,7 +467,7 @@ constructor(
             false
 
         const val DEFAULT_STT_MODEL: String =
-            "whisper-large-v3-turbo"
+            "whisper-large-v3"
 
         const val DEFAULT_LLM_MODEL: String =
             "llama-3.3-70b-versatile"

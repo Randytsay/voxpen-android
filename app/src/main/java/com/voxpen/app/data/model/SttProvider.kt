@@ -18,10 +18,10 @@ sealed class SttProvider(
         key = "groq",
         displayName = "Groq",
         baseUrl = "https://api.groq.com/openai/",
-        defaultModelId = "whisper-large-v3-turbo",
+        defaultModelId = "whisper-large-v3",
         models = listOf(
-            SttModel("whisper-large-v3-turbo", "whisper-large-v3-turbo", tag = "fast", isDefault = true),
-            SttModel("whisper-large-v3", "whisper-large-v3", tag = "quality"),
+            SttModel("whisper-large-v3", "whisper-large-v3", tag = "quality", isDefault = true),
+            SttModel("whisper-large-v3-turbo", "whisper-large-v3-turbo", tag = "fast"),
         ),
     )
 
