@@ -7,7 +7,7 @@
     android:background="@color/keyboard_background"
     android:padding="4dp">
 
-    <!-- Candidate area -->
+    <!-- Voice / refinement candidate area -->
     <LinearLayout
         android:id="@+id/candidate_bar"
         android:layout_width="match_parent"
@@ -19,7 +19,6 @@
         android:paddingBottom="4dp"
         android:visibility="gone">
 
-        <!-- Translation indicator (tappable to cycle target language, × to close) -->
         <LinearLayout
             android:id="@+id/translation_indicator_row"
             android:layout_width="match_parent"
@@ -51,7 +50,6 @@
                 android:scaleType="centerInside" />
         </LinearLayout>
 
-        <!-- Single-line status (recording/processing/error) -->
         <LinearLayout
             android:id="@+id/candidate_status_row"
             android:layout_width="match_parent"
@@ -90,7 +88,6 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- Original text row (tappable) -->
         <TextView
             android:id="@+id/candidate_original"
             android:layout_width="match_parent"
@@ -104,7 +101,6 @@
             android:background="?android:attr/selectableItemBackground"
             android:visibility="gone" />
 
-        <!-- Divider between original and refined -->
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
@@ -112,7 +108,6 @@
             android:layout_marginStart="6dp"
             android:layout_marginEnd="6dp" />
 
-        <!-- Refined text row (tappable) -->
         <LinearLayout
             android:id="@+id/candidate_refined_row"
             android:layout_width="match_parent"
@@ -155,7 +150,13 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Key row -->
+    <!-- Hybrid Boshiamy + Pinyin text keyboard. It owns text composition locally. -->
+    <com.voxpen.app.ime.hybrid.HybridKeyboardPanel
+        android:id="@+id/hybrid_keyboard_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <!-- Existing VoxPen voice / AI toolbar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"

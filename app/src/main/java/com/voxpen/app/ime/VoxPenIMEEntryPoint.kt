@@ -9,6 +9,7 @@ import com.voxpen.app.data.local.PreferencesManager
 import com.voxpen.app.data.local.RecordingStore
 import com.voxpen.app.data.repository.CorrectionMemoryRepository
 import com.voxpen.app.data.repository.DictionaryRepository
+import com.voxpen.app.data.repository.HybridInputRepository
 import com.voxpen.app.data.repository.TranscriptionRepository
 import com.voxpen.app.domain.usecase.EditTextUseCase
 import com.voxpen.app.domain.usecase.RefineTextUseCase
@@ -35,6 +36,8 @@ interface VoxPenIMEEntryPoint {
     fun dictionaryRepository(): DictionaryRepository
 
     fun correctionMemoryRepository(): CorrectionMemoryRepository
+
+    fun hybridInputRepository(): HybridInputRepository
 
     fun personalLearningPreferences(): PersonalLearningPreferences
 

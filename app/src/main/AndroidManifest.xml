@@ -25,6 +25,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ime.hybrid.HybridDictionaryActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VoxPen" />
+
         <!-- IME Service -->
         <service
             android:name=".ime.VoxPenIME"
