@@ -24,9 +24,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # The repository currently has inherited ktlint/detekt debt outside this PR.
-      # Keep reports visible without allowing legacy style failures to hide real
-      # Android compilation, unit-test, or APK failures.
+      # Functional validation comes first. The repository has pre-existing
+      # ktlint/detekt debt, so style reports must not hide compiler failures.
+      - name: Build debug APK
+        run: ./gradlew clean assembleDebug --stacktrace --no-build-cache
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace --no-build-cache
+
       - name: Run ktlint report
         continue-on-error: true
         run: ./gradlew ktlintMainSourceSetCheck
@@ -34,12 +39,6 @@ jobs:
       - name: Run detekt report
         continue-on-error: true
         run: ./gradlew detekt
-
-      - name: Build debug APK
-        run: ./gradlew clean assembleDebug --stacktrace --no-build-cache
-
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace --no-build-cache
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
