@@ -11,11 +11,17 @@ import com.voxpen.app.data.model.RefinementContext
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.SttProvider
 import com.voxpen.app.data.model.ToneStyle
+import com.voxpen.app.data.remote.ChirpStreamingConfig
+import com.voxpen.app.data.remote.StreamingRecognitionController
+import com.voxpen.app.data.remote.StreamingRecognitionListener
+import com.voxpen.app.data.remote.StreamingStatus
 import com.voxpen.app.data.repository.CorrectionMemoryRepository
 import com.voxpen.app.data.repository.DictionaryRepository
 import com.voxpen.app.data.repository.TranscriptionRepository
 import com.voxpen.app.domain.usecase.RefineTextUseCase
 import com.voxpen.app.domain.usecase.TranscribeAudioUseCase
+import com.voxpen.app.util.ChirpAdaptationBuilder
+import com.voxpen.app.util.ChirpLanguageMapper
 import com.voxpen.app.util.RecordingValidator
 import com.voxpen.app.util.VocabularyPromptBuilder
 import com.voxpen.app.util.VocabularySelector
@@ -28,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 class RecordingController(
@@ -44,6 +51,7 @@ class RecordingController(
     private val correctionMemoryRepository: CorrectionMemoryRepository? = null,
     private val messages: RecordingMessages = RecordingMessages.English,
     private val contextMemoryManager: ContextMemoryManager? = null,
+    private val streamingRecognitionController: StreamingRecognitionController? = null,
 ) {
     private val scope =
         CoroutineScope(
@@ -79,6 +87,14 @@ class RecordingController(
 
     private var translationTargetLanguage: SttLanguage =
         PreferencesManager.DEFAULT_TRANSLATION_TARGET_LANGUAGE
+
+    private var streamingLivePreview: Boolean =
+        PreferencesManager.DEFAULT_STREAMING_LIVE_PREVIEW
+
+    private var streamingFallbackToGroq: Boolean =
+        PreferencesManager.DEFAULT_STREAMING_FALLBACK_TO_GROQ
+
+    private var activeStreamingSession: StreamingRecognitionController.Session? = null
 
     init {
         scope.launch {
@@ -140,6 +156,18 @@ class RecordingController(
                 translationTargetLanguage = it
             }
         }
+
+        scope.launch {
+            preferencesManager.streamingLivePreviewFlow.collect {
+                streamingLivePreview = it
+            }
+        }
+
+        scope.launch {
+            preferencesManager.streamingFallbackToGroqFlow.collect {
+                streamingFallbackToGroq = it
+            }
+        }
     }
 
     private val _uiState =
@@ -150,9 +178,24 @@ class RecordingController(
     val uiState: StateFlow<ImeUiState> =
         _uiState.asStateFlow()
 
-    fun onStartRecording(
-        startRecording: () -> Unit,
-    ) {
+    /** Compatibility entry point for the existing batch-recognition tests and callers. */
+    fun onStartRecording(startRecording: () -> Unit) {
+        val proStatus = proStatusProvider()
+        if (!proStatus.isPro && !usageLimiter.canUseVoiceInput()) {
+            _uiState.value =
+                ImeUiState.Error(
+                    "Daily limit reached (${usageLimiter.remainingVoiceInputs()} remaining). " +
+                        "Upgrade to Pro for unlimited use.",
+                )
+            return
+        }
+        startRecording()
+        _uiState.value = ImeUiState.Recording
+    }
+
+    suspend fun onStartRecording(
+        startRecording: (PcmFrameSink?) -> Boolean,
+    ): Boolean {
         val proStatus =
             proStatusProvider()
 
@@ -169,13 +212,68 @@ class RecordingController(
                         "Upgrade to Pro for unlimited use.",
                 )
 
-            return
+            return false
         }
 
-        startRecording()
+        val currentProvider = sttProvider
+        val sessionResult =
+            if (currentProvider == SttProvider.Chirp3Streaming) {
+                prepareStreamingSession()
+            } else {
+                Result.success(null)
+            }
+        if (sessionResult.isFailure) {
+            _uiState.value = ImeUiState.Error(sessionResult.exceptionOrNull()?.message.orEmpty())
+            return false
+        }
+        val session = sessionResult.getOrNull()
+
+        if (!startRecording(session)) {
+            session?.cancel()
+            _uiState.value = ImeUiState.Error("Unable to start microphone")
+            return false
+        }
+
+        activeStreamingSession = session
 
         _uiState.value =
-            ImeUiState.Recording
+            if (session == null) {
+                ImeUiState.Recording
+            } else {
+                ImeUiState.Streaming("", "Connecting…")
+            }
+        return true
+    }
+
+    private suspend fun prepareStreamingSession(): Result<StreamingRecognitionController.Session> {
+        val controller = streamingRecognitionController
+        val gatewayUrl = apiKeyManager.getVertexGatewayUrl().orEmpty()
+        val gatewayToken = apiKeyManager.getSttApiKey(SttProvider.Chirp3Streaming).orEmpty()
+        if (controller == null || gatewayUrl.isBlank() || gatewayToken.isBlank()) {
+            return Result.failure(IllegalStateException("Chirp Gateway URL and token are required"))
+        }
+        val language = preferencesManager.languageFlow.first()
+        val languageCode =
+            runCatching { ChirpLanguageMapper.map(language) }
+                .getOrElse {
+                    return Result.failure(IllegalStateException("Selected language is not supported by Chirp 3"))
+                }
+        val vocabulary = loadVocabulary()
+        return runCatching {
+            controller.start(
+                config =
+                    ChirpStreamingConfig(
+                        gatewayUrl = gatewayUrl,
+                        gatewayToken = gatewayToken,
+                        languageCode = languageCode,
+                        adaptationPhrases =
+                            ChirpAdaptationBuilder
+                                .build(vocabulary.important, vocabulary.ordinary)
+                                .phrases,
+                    ),
+                listener = streamingListener(),
+            )
+        }
     }
 
     fun onStopRecording(
@@ -188,6 +286,9 @@ class RecordingController(
         contextPackageName: String? = null,
         useContext: Boolean = false,
     ) {
+        val currentSttProvider = sttProvider
+        val streamingSession = activeStreamingSession
+        activeStreamingSession = null
         val pcmData =
             stopRecording()
 
@@ -197,6 +298,7 @@ class RecordingController(
             )
         ) {
             RecordingValidator.Result.TooShort -> {
+                streamingSession?.cancel()
                 _uiState.value =
                     ImeUiState.Error(
                         messages.recordingTooShort(),
@@ -206,6 +308,7 @@ class RecordingController(
             }
 
             RecordingValidator.Result.Silent -> {
+                streamingSession?.cancel()
                 _uiState.value =
                     ImeUiState.Error(
                         messages.recordingTooQuiet(),
@@ -218,9 +321,6 @@ class RecordingController(
                 Unit
         }
 
-        val currentSttProvider =
-            sttProvider
-
         val apiKey =
             apiKeyManager.getSttApiKey(
                 currentSttProvider,
@@ -230,6 +330,7 @@ class RecordingController(
             apiKey.isNullOrBlank() &&
             currentSttProvider != SttProvider.Custom
         ) {
+            streamingSession?.cancel()
             _uiState.value =
                 ImeUiState.Error(
                     messages.apiKeyNotConfigured(),
@@ -238,31 +339,32 @@ class RecordingController(
             return
         }
 
+        if (currentSttProvider == SttProvider.Chirp3Streaming &&
+            apiKeyManager.getVertexGatewayUrl().isNullOrBlank()
+        ) {
+            streamingSession?.cancel()
+            _uiState.value = ImeUiState.Error("Chirp Gateway URL is required")
+            return
+        }
+
         val effectiveTone =
             toneOverride ?: toneStyle
 
         _uiState.value =
-            ImeUiState.Processing
+            if (currentSttProvider == SttProvider.Chirp3Streaming) {
+                ImeUiState.Finalizing(streamingSession?.previewText().orEmpty())
+            } else {
+                ImeUiState.Processing
+            }
 
         scope.launch {
             val proStatus =
                 proStatusProvider()
 
-            val recentVocabulary =
-                dictionaryRepository
-                    .getWords(500)
-
-            val importantWords = preferencesManager.importantWordsFlow.first()
-            val importantVocabulary =
-                VocabularySelector.prioritizeImportant(
-                    importantWords = importantWords,
-                    recentVocabulary = recentVocabulary,
-                )
-            val ordinaryVocabulary =
-                recentVocabulary.filterNot { it in importantWords }
-
-            val vocabulary =
-                (importantVocabulary + ordinaryVocabulary).distinct()
+            val vocabularySelection = loadVocabulary()
+            val importantVocabulary = vocabularySelection.important
+            val ordinaryVocabulary = vocabularySelection.ordinary
+            val vocabulary = vocabularySelection.all
 
             val whisperPrompt =
                 if (vocabulary.isNotEmpty()) {
@@ -280,15 +382,43 @@ class RecordingController(
                     .ifBlank { null }
 
             val result =
-                transcribeUseCase(
-                    pcmData = pcmData,
-                    language = language,
-                    apiKey = apiKey.orEmpty(),
-                    model = sttModel,
-                    vocabularyHint = whisperPrompt,
-                    provider = currentSttProvider,
-                    customSttBaseUrl = sttBaseUrl,
-                )
+                if (currentSttProvider == SttProvider.Chirp3Streaming) {
+                    val streamResult =
+                        streamingSession?.finish()
+                            ?: Result.failure(IllegalStateException("Streaming session was not started"))
+                    if (streamResult.isSuccess) {
+                        streamResult.map { it.text }
+                    } else if (streamingFallbackToGroq) {
+                        val groqKey = apiKeyManager.getGroqApiKey().orEmpty()
+                        if (groqKey.isBlank()) {
+                            Result.failure(
+                                IllegalStateException("Streaming failed and Groq fallback is not configured"),
+                            )
+                        } else {
+                            transcribeUseCase(
+                                pcmData = pcmData,
+                                language = language,
+                                apiKey = groqKey,
+                                model = SttProvider.Groq.defaultModelId,
+                                vocabularyHint = whisperPrompt,
+                                provider = SttProvider.Groq,
+                                customSttBaseUrl = null,
+                            )
+                        }
+                    } else {
+                        streamResult.map { it.text }
+                    }
+                } else {
+                    transcribeUseCase(
+                        pcmData = pcmData,
+                        language = language,
+                        apiKey = apiKey.orEmpty(),
+                        model = sttModel,
+                        vocabularyHint = whisperPrompt,
+                        provider = currentSttProvider,
+                        customSttBaseUrl = sttBaseUrl,
+                    )
+                }
 
             result.fold(
                 onSuccess = { originalText ->
@@ -490,6 +620,67 @@ class RecordingController(
         }
     }
 
+    private suspend fun loadVocabulary(): VocabularySelection =
+        withContext(ioDispatcher) {
+            val recentVocabulary = dictionaryRepository.getWords(500)
+            val importantWords = preferencesManager.importantWordsFlow.first()
+            val importantVocabulary =
+                VocabularySelector.prioritizeImportant(
+                    importantWords = importantWords,
+                    recentVocabulary = recentVocabulary,
+                )
+            val ordinaryVocabulary = recentVocabulary.filterNot { it in importantWords }
+            VocabularySelection(
+                important = importantVocabulary,
+                ordinary = ordinaryVocabulary,
+                all = (importantVocabulary + ordinaryVocabulary).distinct(),
+            )
+        }
+
+    private fun streamingListener(): StreamingRecognitionListener =
+        object : StreamingRecognitionListener {
+            private var statusLabel = "Connecting…"
+
+            override fun onPreview(snapshot: StreamingTranscriptSnapshot) {
+                if (streamingLivePreview) {
+                    _uiState.value = ImeUiState.Streaming(snapshot.previewText, statusLabel)
+                }
+            }
+
+            override fun onStatus(
+                status: StreamingStatus,
+                message: String?,
+            ) {
+                statusLabel =
+                    when (status) {
+                        StreamingStatus.Connecting -> "Connecting…"
+                        StreamingStatus.Ready -> "Streaming…"
+                        StreamingStatus.Interrupted -> "Streaming interrupted; recording continues"
+                        StreamingStatus.Finalizing -> "Finalizing…"
+                        StreamingStatus.Completed -> "Completed"
+                        StreamingStatus.Error -> message ?: "Streaming interrupted"
+                    }
+                if (status != StreamingStatus.Completed) {
+                    val snapshot = activeStreamingSession?.snapshot() ?: return
+                    _uiState.value =
+                        if (status == StreamingStatus.Finalizing) {
+                            ImeUiState.Finalizing(snapshot.previewText)
+                        } else {
+                            ImeUiState.Streaming(
+                                if (streamingLivePreview) snapshot.previewText else "",
+                                statusLabel,
+                            )
+                        }
+                }
+            }
+        }
+
+    private data class VocabularySelection(
+        val important: List<String>,
+        val ordinary: List<String>,
+        val all: List<String>,
+    )
+
     private fun canUseRefinement(
         proStatus: ProStatus,
     ): Boolean =
@@ -497,11 +688,15 @@ class RecordingController(
             usageLimiter.canUseRefinement()
 
     fun dismiss() {
+        activeStreamingSession?.cancel()
+        activeStreamingSession = null
         _uiState.value =
             ImeUiState.Idle
     }
 
     fun destroy() {
+        activeStreamingSession?.cancel()
+        activeStreamingSession = null
         scope.cancel()
     }
 }

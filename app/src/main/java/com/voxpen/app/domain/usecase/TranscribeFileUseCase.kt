@@ -39,6 +39,11 @@ class TranscribeFileUseCase
             vocabulary: List<String> = emptyList(),
             customPrompt: String? = null,
         ): Result<TranscriptionEntity> {
+            if (sttProvider == SttProvider.Chirp3Streaming) {
+                return Result.failure(
+                    IllegalArgumentException("Google Chirp 3 is available for live recording only"),
+                )
+            }
             val chunks =
                 if (AudioChunker.isWav(fileBytes)) {
                     AudioChunker.chunkWav(fileBytes, maxChunkBytes)

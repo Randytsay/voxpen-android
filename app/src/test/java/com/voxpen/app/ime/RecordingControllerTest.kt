@@ -125,6 +125,10 @@ class RecordingControllerTest {
             SttLanguage.English,
         )
 
+    private val streamingLivePreviewFlow = MutableStateFlow(true)
+
+    private val streamingFallbackToGroqFlow = MutableStateFlow(false)
+
     /*
      * 新增：
      * 模擬 App 中使用者設定的 ⭐ 重要詞。
@@ -193,6 +197,9 @@ class RecordingControllerTest {
         translationTargetLanguageFlow.value =
             SttLanguage.English
 
+        streamingLivePreviewFlow.value = true
+        streamingFallbackToGroqFlow.value = false
+
         importantWordsFlow.value =
             emptySet()
 
@@ -259,6 +266,14 @@ class RecordingControllerTest {
         every {
             preferencesManager.translationTargetLanguageFlow
         } returns translationTargetLanguageFlow
+
+        every {
+            preferencesManager.streamingLivePreviewFlow
+        } returns streamingLivePreviewFlow
+
+        every {
+            preferencesManager.streamingFallbackToGroqFlow
+        } returns streamingFallbackToGroqFlow
 
         /*
          * 新增：

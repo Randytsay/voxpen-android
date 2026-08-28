@@ -12,7 +12,9 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.ExtractedTextRequest
+import android.view.inputmethod.InputConnection
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -33,8 +35,10 @@ import com.voxpen.app.ui.MainActivity
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -79,9 +83,11 @@ class VoxPenIME : InputMethodService() {
 
     // Translation state (synced from preferences)
     @Volatile private var translationEnabled: Boolean = PreferencesManager.DEFAULT_TRANSLATION_ENABLED
-    @Volatile private var translationTargetLanguage: SttLanguage = PreferencesManager.DEFAULT_TRANSLATION_TARGET_LANGUAGE
+    @Volatile
+    private var translationTargetLanguage: SttLanguage = PreferencesManager.DEFAULT_TRANSLATION_TARGET_LANGUAGE
     @Volatile private var currentSttLanguage: SttLanguage = SttLanguage.Auto
     @Volatile private var autoInsertResult: Boolean = PreferencesManager.DEFAULT_AUTO_INSERT_RESULT
+    private var recordingStartJob: Job? = null
 
     // Audio focus for ducking other apps during recording
     private var audioManager: AudioManager? = null
@@ -93,8 +99,10 @@ class VoxPenIME : InputMethodService() {
     // Previous state tracking for haptic/sound feedback
     private var previousUiState: ImeUiState = ImeUiState.Idle
 
-    // A single pending observation is enough: learn only from the edit immediately following a VoxPen commit.
-    private var pendingCommittedSnapshot: PendingCommittedSnapshot? = null
+    // Tracks the latest VoxPen commit without reading unrelated editor content.
+    private val correctionEditObserver = CorrectionEditObserver()
+    private var correctionObservationJob: Job? = null
+    private var extractedTextRequestToken: Int = 0
 
     // Recording timer
     private var recordingStartTime: Long = 0
@@ -150,6 +158,7 @@ class VoxPenIME : InputMethodService() {
                 ioDispatcher = Dispatchers.IO,
                 correctionMemoryRepository = correctionMemoryRepository,
                 contextMemoryManager = contextMemoryManager,
+                streamingRecognitionController = entryPoint.streamingRecognitionController(),
                 messages =
                     object : RecordingMessages {
                         override fun apiKeyNotConfigured(): String = getString(R.string.provider_key_required)
@@ -164,7 +173,12 @@ class VoxPenIME : InputMethodService() {
             KeyboardActionHandler(
                 onSendKeyEvent = { keyCode -> sendDownUpKeyEvents(keyCode) },
                 onSwitchKeyboard = {
-                    switchToPreviousInputMethod()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        switchToPreviousInputMethod()
+                    } else {
+                        Timber.w("Previous input method switching requires Android 9 or newer")
+                        false
+                    }
                 },
                 onOpenSettings = { launchSettings() },
                 onMicTap = { handleMicTap() },
@@ -313,8 +327,11 @@ class VoxPenIME : InputMethodService() {
             is ImeUiState.CommandDetected,
             is ImeUiState.EditResult,
             -> startRecording()
-            ImeUiState.Recording -> stopRecording()
+            ImeUiState.Recording,
+            is ImeUiState.Streaming,
+            -> stopRecording()
             ImeUiState.Processing,
+            is ImeUiState.Finalizing,
             is ImeUiState.Refining,
             ImeUiState.Editing,
             is ImeUiState.EditInstruction,
@@ -323,6 +340,7 @@ class VoxPenIME : InputMethodService() {
     }
 
     private fun startRecording() {
+        if (recordingStartJob?.isActive == true) return
         if (!audioRecorder.hasPermission()) {
             candidateBar?.visibility = View.VISIBLE
             candidateText?.text = getString(R.string.mic_permission_required)
@@ -332,10 +350,27 @@ class VoxPenIME : InputMethodService() {
 
         learnFromPendingManualEdit()
         requestAudioDucking()
-        recordingController.onStartRecording { audioRecorder.startRecording() }
+        recordingStartTime = 0L
+        recordingStartJob = serviceScope.launch {
+            val started =
+                recordingController.onStartRecording { frameSink ->
+                    audioRecorder.startRecording(frameSink)
+                }
+            if (!started) abandonAudioDucking()
+        }.also { job ->
+            job.invokeOnCompletion {
+                if (recordingStartJob == job) recordingStartJob = null
+            }
+        }
     }
 
     private fun stopRecording() {
+        if (recordingStartJob?.isActive == true && recordingController.uiState.value == ImeUiState.Idle) {
+            recordingStartJob?.cancel()
+            recordingStartJob = null
+            abandonAudioDucking()
+            return
+        }
         abandonAudioDucking()
         serviceScope.launch {
             val language = preferencesManager.languageFlow.first()
@@ -400,7 +435,9 @@ class VoxPenIME : InputMethodService() {
                 addListener(
                     object : android.animation.AnimatorListenerAdapter() {
                         override fun onAnimationEnd(animation: android.animation.Animator) {
-                            if (recordingController.uiState.value == ImeUiState.Recording) {
+                            if (recordingController.uiState.value == ImeUiState.Recording ||
+                                recordingController.uiState.value is ImeUiState.Streaming
+                            ) {
                                 start()
                             }
                         }
@@ -498,6 +535,16 @@ class VoxPenIME : InputMethodService() {
                 recordingStartTime = System.currentTimeMillis()
                 timerHandler.post(timerRunnable)
             }
+            is ImeUiState.Streaming -> {
+                if (recordingStartTime == 0L) recordingStartTime = System.currentTimeMillis()
+                timerHandler.post(timerRunnable)
+                val text = state.preview.ifBlank { state.status }
+                showStatusRow(text, showProgress = false)
+            }
+            is ImeUiState.Finalizing -> {
+                timerHandler.removeCallbacks(timerRunnable)
+                showStatusRow("Finalizing…", showProgress = true)
+            }
             ImeUiState.Processing -> {
                 timerHandler.removeCallbacks(timerRunnable)
                 showStatusRow(getString(R.string.processing), showProgress = true)
@@ -583,66 +630,126 @@ class VoxPenIME : InputMethodService() {
     }
 
     private fun rememberCommittedText(text: String) {
-        val editorInfo = currentInputEditorInfo ?: return
-        if (!ImePrivacyPolicy.shouldLearnFromInput(editorInfo.inputType)) {
-            pendingCommittedSnapshot = null
+        val editorInfo = currentInputEditorInfo
+        if (editorInfo == null || !ImePrivacyPolicy.shouldLearnFromInput(editorInfo.inputType)) {
+            clearCorrectionObservation()
             return
         }
 
+        val request =
+            ExtractedTextRequest().apply {
+                token = ++extractedTextRequestToken
+            }
         val extracted =
-            currentInputConnection
-                ?.getExtractedText(ExtractedTextRequest(), 0)
-                ?: return
-        val baseline = extracted.text?.toString() ?: return
+            currentInputConnection?.getExtractedText(
+                request,
+                InputConnection.GET_EXTRACTED_TEXT_MONITOR,
+            )
+        val baseline = extracted?.text?.toString()
+        if (baseline == null) {
+            clearCorrectionObservation()
+            return
+        }
         val end = extracted.selectionStart.coerceIn(0, baseline.length)
         val start = (end - text.length).coerceAtLeast(0)
-        if (start >= end) return
-
-        pendingCommittedSnapshot =
-            PendingCommittedSnapshot(
+        if (start >= end) {
+            clearCorrectionObservation()
+        } else {
+            correctionEditObserver.onCommitted(
                 baselineText = baseline,
                 committedStart = start,
                 committedEnd = end,
                 packageName = editorInfo.packageName.orEmpty(),
                 inputType = editorInfo.inputType,
             )
-    }
-
-    private fun learnFromPendingManualEdit() {
-        val pending = pendingCommittedSnapshot ?: return
-        pendingCommittedSnapshot = null
-
-        if (!personalLearningPreferences.enabled.value) return
-        val editorInfo = currentInputEditorInfo ?: return
-        if (editorInfo.packageName.orEmpty() != pending.packageName) return
-        if (!ImePrivacyPolicy.shouldLearnFromInput(editorInfo.inputType)) return
-        if (!ImePrivacyPolicy.shouldLearnFromInput(pending.inputType)) return
-
-        val current =
-            currentInputConnection
-                ?.getExtractedText(ExtractedTextRequest(), 0)
-                ?.text
-                ?.toString()
-                ?: return
-
-        val candidate =
-            CorrectionLearningDetector.detect(
-                baselineText = pending.baselineText,
-                currentText = current,
-                committedStart = pending.committedStart,
-                committedEnd = pending.committedEnd,
-            ) ?: return
-
-        serviceScope.launch(Dispatchers.IO) {
-            correctionMemoryRepository.learn(
-                candidate = candidate,
-                packageName = pending.packageName,
-            )
         }
     }
 
+    private fun learnFromPendingManualEdit() {
+        observePendingManualEditNow()
+    }
+
+    private fun scheduleManualEditObservation() {
+        val generation = correctionEditObserver.currentSnapshot?.generation ?: return
+        correctionObservationJob?.cancel()
+        correctionObservationJob =
+            serviceScope.launch {
+                delay(MANUAL_EDIT_DEBOUNCE_MS)
+                if (correctionEditObserver.currentSnapshot?.generation == generation) {
+                    observePendingManualEditNow()
+                }
+            }
+    }
+
+    private fun observePendingManualEditNow() {
+        correctionObservationJob = null
+        val pending = correctionEditObserver.currentSnapshot
+        if (pending != null) {
+            val editorInfo = currentInputEditorInfo
+            when {
+                editorInfo == null || editorInfo.packageName.orEmpty() != pending.packageName -> {
+                    correctionEditObserver.clear()
+                    Timber.d("correction_learning_cleared_app_change")
+                }
+                !ImePrivacyPolicy.shouldLearnFromInput(editorInfo.inputType) ||
+                    !ImePrivacyPolicy.shouldLearnFromInput(pending.inputType) -> {
+                    correctionEditObserver.clear()
+                    Timber.d("correction_learning_cleared_sensitive_editor")
+                }
+                !personalLearningPreferences.enabled.value -> {
+                    correctionEditObserver.clear()
+                    Timber.d("correction_learning_skipped_disabled")
+                }
+                else -> {
+                    val current =
+                        currentInputConnection
+                            ?.getExtractedText(ExtractedTextRequest(), 0)
+                            ?.text
+                            ?.toString()
+                    if (current != null) {
+                        handleManualEditObservation(
+                            correctionEditObserver.observe(current, pending.packageName),
+                            pending.packageName,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun handleManualEditObservation(
+        observation: CorrectionEditObserver.Observation,
+        packageName: String,
+    ) {
+        when (observation) {
+            CorrectionEditObserver.Observation.NoPending,
+            CorrectionEditObserver.Observation.Unchanged,
+            CorrectionEditObserver.Observation.Ignored,
+            -> Unit
+            is CorrectionEditObserver.Observation.Cleared -> {
+                Timber.d("correction_learning_rejected_${observation.reason.name.lowercase()}")
+            }
+            is CorrectionEditObserver.Observation.CandidateDetected -> {
+                Timber.d("correction_learning_candidate_detected")
+                serviceScope.launch(Dispatchers.IO) {
+                    correctionMemoryRepository.learn(
+                        candidate = observation.candidate,
+                        packageName = packageName,
+                    )
+                    Timber.d("correction_learning_saved")
+                }
+            }
+        }
+    }
+
+    private fun clearCorrectionObservation() {
+        correctionObservationJob?.cancel()
+        correctionObservationJob = null
+        correctionEditObserver.clear()
+    }
+
     private fun updateMicAppearance(state: ImeUiState) {
-        if (state == ImeUiState.Recording) {
+        if (state == ImeUiState.Recording || state is ImeUiState.Streaming) {
             micButton?.setBackgroundColor(getColor(R.color.mic_active))
             micButton?.let { startMicPulse(it) }
         } else {
@@ -1102,6 +1209,7 @@ class VoxPenIME : InputMethodService() {
 
     companion object {
         private const val MAX_RECORDING_SECONDS = 600L // 10 minutes
+        private const val MANUAL_EDIT_DEBOUNCE_MS = 700L
     }
 
     private fun launchSettings() {
@@ -1118,6 +1226,7 @@ class VoxPenIME : InputMethodService() {
         info: EditorInfo,
         restarting: Boolean,
     ) {
+        flushAndClearCorrectionObservation()
         super.onStartInput(info, restarting)
         currentEditorPackageName = info.packageName.orEmpty()
         currentEditorInputType = info.inputType
@@ -1135,22 +1244,56 @@ class VoxPenIME : InputMethodService() {
         updateToneButton()
     }
 
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int,
+    ) {
+        super.onUpdateSelection(
+            oldSelStart,
+            oldSelEnd,
+            newSelStart,
+            newSelEnd,
+            candidatesStart,
+            candidatesEnd,
+        )
+        scheduleManualEditObservation()
+    }
+
+    override fun onUpdateExtractedText(token: Int, text: ExtractedText) {
+        super.onUpdateExtractedText(token, text)
+        if (token == extractedTextRequestToken) scheduleManualEditObservation()
+    }
+
+    override fun onFinishInput() {
+        flushAndClearCorrectionObservation()
+        super.onFinishInput()
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        flushAndClearCorrectionObservation()
+        super.onFinishInputView(finishingInput)
+    }
+
+    private fun flushAndClearCorrectionObservation() {
+        correctionObservationJob?.cancel()
+        correctionObservationJob = null
+        observePendingManualEditNow()
+        correctionEditObserver.clear()
+    }
+
     override fun onDestroy() {
         stopMicPulse()
         timerHandler.removeCallbacks(timerRunnable)
         abandonAudioDucking()
-        pendingCommittedSnapshot = null
+        clearCorrectionObservation()
         audioRecorder.release()
         recordingController.destroy()
         serviceScope.cancel()
         super.onDestroy()
     }
 
-    private data class PendingCommittedSnapshot(
-        val baselineText: String,
-        val committedStart: Int,
-        val committedEnd: Int,
-        val packageName: String,
-        val inputType: Int,
-    )
 }

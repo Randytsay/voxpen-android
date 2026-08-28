@@ -26,7 +26,7 @@ class AudioRecorder(private val context: Context) {
     }
 
     @Suppress("ReturnCount")
-    fun startRecording(): Boolean {
+    fun startRecording(frameSink: PcmFrameSink? = null): Boolean {
         if (!hasPermission()) {
             Timber.w("RECORD_AUDIO permission not granted")
             return false
@@ -48,11 +48,26 @@ class AudioRecorder(private val context: Context) {
         recordingThread =
             Thread {
                 val buffer = ByteArray(bufferSize)
+                val frameAccumulator = ByteArrayOutputStream(FRAME_BYTES)
                 while (isRecording) {
                     val bytesRead = recorder.read(buffer, 0, buffer.size)
                     if (bytesRead > 0) {
                         pcmOutput?.write(buffer, 0, bytesRead)
+                        if (frameSink != null) {
+                            frameAccumulator.write(buffer, 0, bytesRead)
+                            while (frameAccumulator.size() >= FRAME_BYTES) {
+                                val frame = frameAccumulator.toByteArray()
+                                frameSink.offer(frame.copyOf(FRAME_BYTES))
+                                frameAccumulator.reset()
+                                if (frame.size > FRAME_BYTES) {
+                                    frameAccumulator.write(frame, FRAME_BYTES, frame.size - FRAME_BYTES)
+                                }
+                            }
+                        }
                     }
+                }
+                if (frameSink != null && frameAccumulator.size() > 0) {
+                    frameSink.offer(frameAccumulator.toByteArray())
                 }
             }.apply { start() }
 
@@ -108,6 +123,8 @@ class AudioRecorder(private val context: Context) {
         const val SAMPLE_RATE = 16000
         const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
+        const val FRAME_DURATION_MS = 100
+        const val FRAME_BYTES = SAMPLE_RATE * FRAME_DURATION_MS / 1000 * 2
         private const val STOP_TIMEOUT_MS = 2000L
     }
 }

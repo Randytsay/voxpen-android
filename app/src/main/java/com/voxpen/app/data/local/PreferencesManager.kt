@@ -50,6 +50,18 @@ constructor(
                 ?: DEFAULT_AUTO_INSERT_RESULT
         }
 
+    val streamingLivePreviewFlow: Flow<Boolean> =
+        dataStore.data.map { prefs ->
+            prefs[STREAMING_LIVE_PREVIEW_KEY]
+                ?: DEFAULT_STREAMING_LIVE_PREVIEW
+        }
+
+    val streamingFallbackToGroqFlow: Flow<Boolean> =
+        dataStore.data.map { prefs ->
+            prefs[STREAMING_FALLBACK_TO_GROQ_KEY]
+                ?: DEFAULT_STREAMING_FALLBACK_TO_GROQ
+        }
+
     val sttModelFlow: Flow<String> =
         dataStore.data.map { prefs ->
             prefs[STT_MODEL_KEY]
@@ -207,6 +219,18 @@ constructor(
         dataStore.edit { prefs ->
             prefs[AUTO_INSERT_RESULT_KEY] =
                 enabled
+        }
+    }
+
+    suspend fun setStreamingLivePreview(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[STREAMING_LIVE_PREVIEW_KEY] = enabled
+        }
+    }
+
+    suspend fun setStreamingFallbackToGroq(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[STREAMING_FALLBACK_TO_GROQ_KEY] = enabled
         }
     }
 
@@ -466,6 +490,12 @@ constructor(
         const val DEFAULT_AUTO_INSERT_RESULT: Boolean =
             false
 
+        const val DEFAULT_STREAMING_LIVE_PREVIEW: Boolean =
+            true
+
+        const val DEFAULT_STREAMING_FALLBACK_TO_GROQ: Boolean =
+            false
+
         const val DEFAULT_STT_MODEL: String =
             "whisper-large-v3"
 
@@ -500,6 +530,12 @@ constructor(
             booleanPreferencesKey(
                 "auto_insert_result",
             )
+
+        private val STREAMING_LIVE_PREVIEW_KEY =
+            booleanPreferencesKey("streaming_live_preview")
+
+        private val STREAMING_FALLBACK_TO_GROQ_KEY =
+            booleanPreferencesKey("streaming_fallback_to_groq")
 
         private val ONBOARDING_COMPLETED_KEY =
             booleanPreferencesKey(

@@ -7,6 +7,15 @@ sealed interface ImeUiState {
 
     data object Recording : ImeUiState
 
+    data class Streaming(
+        val preview: String,
+        val status: String = "Streaming…",
+    ) : ImeUiState
+
+    data class Finalizing(
+        val preview: String,
+    ) : ImeUiState
+
     data object Processing : ImeUiState
 
     data class Result(val text: String) : ImeUiState

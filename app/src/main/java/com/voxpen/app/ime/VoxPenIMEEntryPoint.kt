@@ -11,6 +11,7 @@ import com.voxpen.app.data.repository.CorrectionMemoryRepository
 import com.voxpen.app.data.repository.DictionaryRepository
 import com.voxpen.app.data.repository.HybridInputRepository
 import com.voxpen.app.data.repository.TranscriptionRepository
+import com.voxpen.app.data.remote.StreamingRecognitionController
 import com.voxpen.app.domain.usecase.EditTextUseCase
 import com.voxpen.app.domain.usecase.RefineTextUseCase
 import com.voxpen.app.domain.usecase.TranscribeAudioUseCase
@@ -48,4 +49,6 @@ interface VoxPenIMEEntryPoint {
     fun usageLimiter(): UsageLimiter
 
     fun proStatusResolver(): ProStatusResolver
+
+    fun streamingRecognitionController(): StreamingRecognitionController
 }

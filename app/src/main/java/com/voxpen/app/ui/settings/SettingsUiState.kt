@@ -15,6 +15,8 @@ data class SettingsUiState(
     val recordingMode: RecordingMode = RecordingMode.TAP_TO_TOGGLE,
     val refinementEnabled: Boolean = true,
     val autoInsertResult: Boolean = PreferencesManager.DEFAULT_AUTO_INSERT_RESULT,
+    val streamingLivePreview: Boolean = PreferencesManager.DEFAULT_STREAMING_LIVE_PREVIEW,
+    val streamingFallbackToGroq: Boolean = PreferencesManager.DEFAULT_STREAMING_FALLBACK_TO_GROQ,
     val sttProvider: SttProvider = SttProvider.DEFAULT,
     val sttModel: String = PreferencesManager.DEFAULT_STT_MODEL,
     val llmModel: String = PreferencesManager.DEFAULT_LLM_MODEL,

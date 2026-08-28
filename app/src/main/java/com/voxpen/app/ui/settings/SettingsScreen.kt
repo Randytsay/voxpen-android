@@ -123,6 +123,8 @@ fun SettingsScreenContent(
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             SttModelSection(state, viewModel)
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            StreamingSettingsSection(state, viewModel)
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             LlmProviderSection(state, viewModel)
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             RecordingModeSection(state, viewModel)
@@ -582,7 +584,11 @@ private fun SttModelSection(
     }
 
     Spacer(Modifier.height(8.dp))
-    SttProviderApiKeyField(state, viewModel)
+    if (state.sttProvider == SttProvider.Chirp3Streaming) {
+        ChirpGatewayFields(state, viewModel)
+    } else {
+        SttProviderApiKeyField(state, viewModel)
+    }
     Spacer(Modifier.height(8.dp))
 
     if (state.sttProvider == SttProvider.Custom) {
@@ -609,6 +615,92 @@ private fun SttModelSection(
                 viewModel.setSttModel(model.id)
             }
         }
+    }
+}
+
+@Composable
+private fun ChirpGatewayFields(
+    state: SettingsUiState,
+    viewModel: SettingsViewModel,
+) {
+    Text(
+        "Google Cloud Speech-to-Text V2 會透過安全 Gateway 串流；不需要把 Google 憑證放進手機。",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = state.vertexGatewayUrl,
+        onValueChange = viewModel::setVertexGatewayUrl,
+        label = { Text("Chirp Gateway URL") },
+        placeholder = { Text("https://your-gateway.example/v1") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(8.dp))
+    var tokenInput by remember { mutableStateOf("") }
+    if (state.providerApiKeys[LlmProvider.Vertex.key] == true) {
+        Text(
+            "Gateway token 已設定（與 Google Vertex LLM 共用）",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+    OutlinedTextField(
+        value = tokenInput,
+        onValueChange = { tokenInput = it },
+        label = { Text("Gateway Bearer Token") },
+        visualTransformation = PasswordVisualTransformation(),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Button(
+        onClick = {
+            if (tokenInput.isNotBlank()) {
+                viewModel.saveProviderApiKey(LlmProvider.Vertex, tokenInput)
+                tokenInput = ""
+            }
+        },
+        modifier = Modifier.padding(top = 4.dp),
+    ) { Text(stringResource(R.string.settings_save)) }
+}
+
+@Composable
+private fun StreamingSettingsSection(
+    state: SettingsUiState,
+    viewModel: SettingsViewModel,
+) {
+    SectionHeader("Streaming ASR")
+    Text(
+        "僅選擇 Google Chirp 3 Streaming 時生效；Groq / OpenAI 不受影響。",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("即時候選預覽")
+            Text("只顯示 interim，不會插入或建立修正記憶。", style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(
+            checked = state.streamingLivePreview,
+            onCheckedChange = viewModel::setStreamingLivePreview,
+        )
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("串流失敗時改用 Groq")
+            Text("會重新送出本地錄音，可能產生 Groq 費用。", style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(
+            checked = state.streamingFallbackToGroq,
+            onCheckedChange = viewModel::setStreamingFallbackToGroq,
+        )
     }
 }
 
@@ -920,6 +1012,7 @@ private fun sttProviderDisplayName(provider: SttProvider): String =
     when (provider) {
         SttProvider.Groq -> "Groq"
         SttProvider.OpenAI -> "OpenAI"
+        SttProvider.Chirp3Streaming -> "Google Chirp 3 Streaming"
         SttProvider.Custom -> "Custom"
     }
 

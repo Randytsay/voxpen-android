@@ -45,15 +45,26 @@ sealed class SttProvider(
         models = emptyList(),
     )
 
+    data object Chirp3Streaming : SttProvider(
+        key = "google_chirp3_streaming",
+        displayName = "Google Chirp 3 Streaming",
+        baseUrl = null,
+        defaultModelId = "chirp_3",
+        models = listOf(
+            SttModel("chirp_3", "Chirp 3 Streaming", tag = "live", isDefault = true),
+        ),
+    )
+
     companion object {
         val DEFAULT: SttProvider get() = Groq
-        val all: List<SttProvider> get() = listOf(Groq, OpenAI, Custom)
+        val all: List<SttProvider> get() = listOf(Groq, OpenAI, Chirp3Streaming, Custom)
 
         fun fromKey(key: String?): SttProvider =
             when (key) {
                 Groq.key -> Groq
                 OpenAI.key -> OpenAI
                 Custom.key -> Custom
+                Chirp3Streaming.key -> Chirp3Streaming
                 else -> DEFAULT
             }
     }

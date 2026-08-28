@@ -65,6 +65,12 @@ Add names, places, and specialized terms in the Dictionary. Star important entri
 ### Context Memory
 After a successful text commit, VoxPen keeps up to five short entries per target app locally in DataStore. Context is isolated by package name, is used only as reference for the next refinement, and is excluded for password input fields. Failed, blank, command, and edit-instruction flows are not stored.
 
+### Chirp 3 Streaming ASR
+Select **Google Chirp 3 Streaming** to see interim recognition while speaking. The IME sends 16 kHz mono PCM16 frames to the authenticated Speech-to-Text V2 gateway; interim text is preview-only and is never inserted, sent to Gemini, or written to correction memory. Final text continues through the existing correction-memory, context-memory, Gemini refinement, and Auto Insert pipeline. The gateway reconnects with a bounded replay buffer and rolls over before the five-minute streaming limit; an optional setting can retry the locally retained recording through Groq when streaming fails.
+
+### Personal Correction Memory
+After VoxPen inserts a result, the IME observes only subsequent changes in that active editor. A 700 ms debounce learns conservative local corrections immediately, so the user does not need to start another recording. Selection-only changes, punctuation/formatting-only changes, numeric edits, broad rewrites, package changes, and sensitive fields do not create rules. Multiple corrections in one committed utterance can be learned independently, while existing app scope and manual correction levels remain unchanged.
+
 ### Google Vertex Gemini
 The Android app supports **Google Vertex** through the private gateway in [`vertex-gateway/`](vertex-gateway/). Select Google Vertex in Settings, enter your gateway `/v1` URL and gateway token, and keep Google ADC credentials on the gateway host. The app sends model `google/gemini-3.7-flash`, `reasoning_effort=low`, and `max_tokens=4096`; it does not contain a service-account key or Google credential.
 
@@ -142,6 +148,7 @@ Whisper supports 99 languages for STT. VoxPen currently exposes 3 + auto-detect 
 | **Groq** | Whisper large-v3 (default; Turbo remains selectable) | LLaMA, Qwen, etc. | Free tier available |
 | **OpenAI** | Whisper, GPT-4o transcribe | GPT-4o, etc. | |
 | **Google Vertex** | — | Gemini 3.7 Flash via private gateway | ADC credentials stay on gateway |
+| **Google Chirp 3** | Streaming ASR via Speech-to-Text V2 gateway | — | Shares the Vertex gateway URL/token; interim preview is not committed |
 | **Custom** | Any Whisper-compatible endpoint | Any OpenAI-compatible endpoint | Self-hosted support |
 
 ## Getting Started

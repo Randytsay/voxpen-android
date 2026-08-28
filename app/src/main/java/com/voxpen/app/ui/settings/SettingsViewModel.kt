@@ -82,6 +82,16 @@ class SettingsViewModel
                 }
             }
             viewModelScope.launch {
+                preferencesManager.streamingLivePreviewFlow.collect { enabled ->
+                    _uiState.update { it.copy(streamingLivePreview = enabled) }
+                }
+            }
+            viewModelScope.launch {
+                preferencesManager.streamingFallbackToGroqFlow.collect { enabled ->
+                    _uiState.update { it.copy(streamingFallbackToGroq = enabled) }
+                }
+            }
+            viewModelScope.launch {
                 preferencesManager.sttModelFlow.collect { model ->
                     _uiState.update { it.copy(sttModel = model) }
                 }
@@ -167,6 +177,14 @@ class SettingsViewModel
 
         fun setAutoInsertResult(enabled: Boolean) {
             viewModelScope.launch { preferencesManager.setAutoInsertResult(enabled) }
+        }
+
+        fun setStreamingLivePreview(enabled: Boolean) {
+            viewModelScope.launch { preferencesManager.setStreamingLivePreview(enabled) }
+        }
+
+        fun setStreamingFallbackToGroq(enabled: Boolean) {
+            viewModelScope.launch { preferencesManager.setStreamingFallbackToGroq(enabled) }
         }
 
         fun setSttModel(model: String) {

@@ -11,7 +11,7 @@ data class CorrectionLearningCandidate(
  * The detector intentionally prefers missing a learning opportunity over learning a bad rule.
  */
 object CorrectionLearningDetector {
-    private const val MAX_CHANGED_TEXT = 48
+    private const val MAX_CHANGED_TEXT = 8
     private const val MAX_DOCUMENT_DELTA = 96
     private const val CJK_CONTEXT_SUFFIX = 2
 

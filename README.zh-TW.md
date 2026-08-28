@@ -65,6 +65,12 @@ VoxPen 是一款 Android 語音鍵盤，透過 Whisper 將語音轉為文字，�
 ### 上下文記憶
 只有文字確實插入成功後，VoxPen 才會在本機 DataStore 為目標 App 保留最多 5 筆短文字。上下文依 App package 隔離，只作下一次潤稿的參考；密碼輸入欄位不讀取也不儲存。失敗、空白、語音指令與編輯指令都不會寫入記憶。
 
+### Chirp 3 串流語音辨識
+選擇 **Google Chirp 3 Streaming** 後，說話時會在鍵盤候選列看到 interim 即時預覽。IME 以 16 kHz、單聲道、PCM16 frame 傳送到已驗證的 Speech-to-Text V2 gateway；interim 只作預覽，不會插入文字、不會送進 Gemini，也不會寫入修正記憶。final 文字仍沿用既有的修正記憶、上下文記憶、Gemini 潤稿與自動插入流程。Gateway 會以有限 replay buffer 處理重連，並在五分鐘串流上限前 rollover；若串流失敗，也可在設定中選擇用本機保留錄音回退 Groq。
+
+### 個人修正記憶
+VoxPen 插入辨識結果後，只觀察目前 App 編輯器中接續發生的文字變更。700ms debounce 會即時學習保守的區域修正，因此不需要再按一次麥克風。只有移動游標、純標點/格式變更、數字變更、大幅改寫、切換 App 或敏感欄位不會建立規則；同一段插入文字中的多個修正可以分別學習，既有 App scope 與手動修正等級維持不變。
+
 ### Google Vertex Gemini
 Android 支援透過 [`vertex-gateway/`](vertex-gateway/) 使用 **Google Vertex**。在設定選擇 Google Vertex，輸入私人 gateway 的 `/v1` 網址與 gateway token；Google ADC 憑證只放在 gateway 主機。App 使用 `google/gemini-3.7-flash`、`reasoning_effort=low` 與 `max_tokens=4096`，不會包含 service-account key 或 Google 憑證。
 
@@ -142,6 +148,7 @@ Whisper 支援 99 種語言的語音轉文字。VoxPen 目前提供 3 種語言 
 | **Groq** | Whisper large-v3（預設；仍可選 Turbo） | LLaMA、Qwen 等 | 有免費額度 |
 | **OpenAI** | Whisper、GPT-4o transcribe | GPT-4o 等 | |
 | **Google Vertex** | — | Gemini 3.7 Flash（經私人 gateway） | ADC 憑證留在 gateway |
+| **Google Chirp 3** | Speech-to-Text V2 串流（經 gateway） | — | 與 Vertex 共用 gateway 網址/token；interim 不會插入 |
 | **自訂** | 任何 Whisper 相容端點 | 任何 OpenAI 相容端點 | 支援自架伺服器 |
 
 ## 開始使用

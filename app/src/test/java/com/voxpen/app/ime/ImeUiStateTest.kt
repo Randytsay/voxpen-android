@@ -11,6 +11,8 @@ class ImeUiStateTest {
             listOf(
                 ImeUiState.Idle,
                 ImeUiState.Recording,
+                ImeUiState.Streaming("preview"),
+                ImeUiState.Finalizing("preview"),
                 ImeUiState.Processing,
                 ImeUiState.Result("hello"),
                 ImeUiState.Refining("raw"),
@@ -21,7 +23,7 @@ class ImeUiStateTest {
                 ImeUiState.Editing,
                 ImeUiState.EditResult("revised text"),
             )
-        assertThat(states).hasSize(11)
+        assertThat(states).hasSize(13)
     }
 
     @Test
@@ -56,6 +58,8 @@ class ImeUiStateTest {
             when (state) {
                 ImeUiState.Idle -> "idle"
                 ImeUiState.Recording -> "recording"
+                is ImeUiState.Streaming -> "streaming"
+                is ImeUiState.Finalizing -> "finalizing"
                 ImeUiState.Processing -> "processing"
                 is ImeUiState.Result -> "result"
                 is ImeUiState.Refining -> "refining"

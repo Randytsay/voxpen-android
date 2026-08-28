@@ -52,6 +52,7 @@ class ApiKeyManager
                     ?: encryptedPrefs.getString(keyFor(LlmProvider.OpenAI), null)
                 SttProvider.Custom -> encryptedPrefs.getString("${STT_KEY_PREFIX}${provider.key}", null)
                     ?: encryptedPrefs.getString(keyFor(LlmProvider.Custom), null)
+                SttProvider.Chirp3Streaming -> getApiKey(LlmProvider.Vertex)
             }
 
         fun setSttApiKey(
@@ -60,6 +61,10 @@ class ApiKeyManager
         ) {
             if (provider == SttProvider.Groq) {
                 setGroqApiKey(key)
+                return
+            }
+            if (provider == SttProvider.Chirp3Streaming) {
+                setApiKey(LlmProvider.Vertex, key)
                 return
             }
             encryptedPrefs.edit().apply {
