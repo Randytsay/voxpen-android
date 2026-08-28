@@ -7,15 +7,8 @@ import org.junit.jupiter.api.Test
 class HybridLexiconImporterTest {
     @Test
     fun `rime phrase creates full pinyin and initials`() {
-        val parsed =
-            HybridLexiconImporter.parseRimeDictionary(
-                """
-                ---
-                name: demo
-                ...
-                常用文\tchang yong wen\t1200
-                """.trimIndent(),
-            )
+        val raw = "---\nname: demo\n...\n常用文\tchang yong wen\t1200\n"
+        val parsed = HybridLexiconImporter.parseRimeDictionary(raw)
 
         val entity = HybridLexiconImporter.toEntity(parsed.single())
 
@@ -45,13 +38,8 @@ class HybridLexiconImporterTest {
 
     @Test
     fun `baidu text parser accepts phrase and pinyin columns`() {
-        val parsed =
-            HybridLexiconImporter.parseBaiduText(
-                """
-                保固\tbao gu\t10
-                表格,biao ge,5
-                """.trimIndent(),
-            )
+        val raw = "保固\tbao gu\t10\n表格,biao ge,5\n"
+        val parsed = HybridLexiconImporter.parseBaiduText(raw)
 
         assertThat(parsed).hasSize(2)
         assertThat(parsed[0].phrase).isEqualTo("保固")
