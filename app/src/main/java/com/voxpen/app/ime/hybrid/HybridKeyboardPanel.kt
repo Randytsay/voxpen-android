@@ -18,6 +18,7 @@ import com.voxpen.app.data.repository.HybridInputRepository
 import com.voxpen.app.ime.ImePrivacyPolicy
 import com.voxpen.app.ime.VoxPenIMEEntryPoint
 import dagger.hilt.android.EntryPointAccessors
+import java.util.ArrayDeque
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -43,10 +44,12 @@ class HybridKeyboardPanel
         private val compositionView = TextView(context)
         private val candidateRow = LinearLayout(context)
         private val modeButton = TextView(context)
+        private val learningTokens = ArrayDeque<LearningToken>()
         private var composition = ""
         private var chineseMode = true
         private var candidates: List<HybridCandidate> = emptyList()
         private var queryJob: Job? = null
+        private var lastLearningSelectionAt = 0L
 
         init {
             orientation = VERTICAL
@@ -193,6 +196,7 @@ class HybridKeyboardPanel
                     commitRawComposition()
                 }
             } else {
+                resetLearningSequence()
                 ime?.currentInputConnection?.commitText(" ", 1)
             }
         }
@@ -205,6 +209,7 @@ class HybridKeyboardPanel
                     commitRawComposition()
                 }
             } else {
+                resetLearningSequence()
                 ime?.sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
             }
         }
@@ -218,6 +223,7 @@ class HybridKeyboardPanel
                 }
             }
             ime?.currentInputConnection?.commitText(value, 1)
+            resetLearningSequence()
         }
 
         private fun toggleMode() {
@@ -225,6 +231,7 @@ class HybridKeyboardPanel
             chineseMode = !chineseMode
             modeButton.text = if (chineseMode) "中" else "EN"
             clearComposition()
+            resetLearningSequence()
         }
 
         private fun refreshCandidates() {
@@ -283,8 +290,46 @@ class HybridKeyboardPanel
                 scope.launch(Dispatchers.IO) {
                     repository.recordSelection(candidate)
                 }
+                rememberPhoneticSequence(candidate)
             }
             clearComposition()
+        }
+
+        private fun rememberPhoneticSequence(candidate: HybridCandidate) {
+            if (candidate.source == HybridLexiconSource.BOSHIAMY || candidate.code.isBlank()) {
+                resetLearningSequence()
+                return
+            }
+
+            val now = System.currentTimeMillis()
+            if (now - lastLearningSelectionAt > LEARNING_SEQUENCE_TIMEOUT_MS) {
+                learningTokens.clear()
+            }
+            lastLearningSelectionAt = now
+            learningTokens.addLast(
+                LearningToken(
+                    phrase = candidate.phrase,
+                    pinyin = candidate.code.trim(),
+                ),
+            )
+            while (learningTokens.size > MAX_LEARNING_TOKENS) {
+                learningTokens.removeFirst()
+            }
+
+            val snapshot = learningTokens.toList()
+            if (snapshot.size < 2) return
+            scope.launch(Dispatchers.IO) {
+                val maxSize = minOf(snapshot.size, MAX_LEARNING_TOKENS)
+                for (size in 2..maxSize) {
+                    val tokens = snapshot.takeLast(size)
+                    val phrase = tokens.joinToString(separator = "") { it.phrase }
+                    if (phrase.length !in MIN_LEARNED_PHRASE_LENGTH..MAX_LEARNED_PHRASE_LENGTH) {
+                        continue
+                    }
+                    val pinyin = tokens.joinToString(separator = " ") { it.pinyin }
+                    repository.learnPersonalPhrase(phrase, pinyin)
+                }
+            }
         }
 
         private fun commitRawComposition() {
@@ -293,6 +338,7 @@ class HybridKeyboardPanel
                 ime?.currentInputConnection?.commitText(raw, 1)
             }
             clearComposition()
+            resetLearningSequence()
         }
 
         private fun clearComposition() {
@@ -300,6 +346,11 @@ class HybridKeyboardPanel
             candidates = emptyList()
             updateComposition()
             renderCandidates()
+        }
+
+        private fun resetLearningSequence() {
+            learningTokens.clear()
+            lastLearningSelectionAt = 0L
         }
 
         private fun updateComposition() {
@@ -320,7 +371,17 @@ class HybridKeyboardPanel
         private fun dp(value: Int): Int =
             (value * resources.displayMetrics.density).toInt()
 
+        private data class LearningToken(
+            val phrase: String,
+            val pinyin: String,
+        )
+
         companion object {
+            private const val MAX_LEARNING_TOKENS = 4
+            private const val MIN_LEARNED_PHRASE_LENGTH = 2
+            private const val MAX_LEARNED_PHRASE_LENGTH = 12
+            private const val LEARNING_SEQUENCE_TIMEOUT_MS = 10_000L
+
             private fun findImeService(context: Context): InputMethodService? {
                 var current: Context? = context
                 while (current is ContextWrapper) {

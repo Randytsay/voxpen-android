@@ -93,19 +93,25 @@ class HybridInputRepository
             phrase: String,
             pinyin: String,
         ): Boolean {
-            val cleanedPhrase = phrase.trim()
-            val cleanedPinyin = pinyin.trim()
-            if (cleanedPhrase.isBlank() || cleanedPinyin.isBlank()) return false
-            val entity =
-                HybridLexiconImporter.toEntity(
-                    HybridLexiconImporter.ParsedEntry(
-                        phrase = cleanedPhrase,
-                        code = cleanedPinyin,
-                        source = HybridLexiconSource.PERSONAL,
-                        baseWeight = PERSONAL_BASE_WEIGHT,
-                    ),
-                )
+            val entity = personalEntity(phrase, pinyin) ?: return false
             return dao.insertAll(listOf(entity)).firstOrNull() != -1L
+        }
+
+        suspend fun learnPersonalPhrase(
+            phrase: String,
+            pinyin: String,
+        ): Boolean {
+            val entity = personalEntity(phrase, pinyin) ?: return false
+            val insertedId = dao.insertAll(listOf(entity)).firstOrNull()?.takeIf { it > 0 }
+            val id =
+                insertedId
+                    ?: dao.findExactPersonal(
+                        phrase = entity.phrase,
+                        normalizedCode = entity.normalizedCode,
+                    )?.id
+                    ?: return false
+            dao.recordSelection(id, System.currentTimeMillis())
+            return true
         }
 
         suspend fun importBoshiamyCin(raw: String): ImportResult {
@@ -175,6 +181,23 @@ class HybridInputRepository
                 parts += entry.code.trim().substringBefore(' ')
             }
             return parts.takeIf { it.isNotEmpty() }?.joinToString(" ")
+        }
+
+        private fun personalEntity(
+            phrase: String,
+            pinyin: String,
+        ): HybridLexiconEntity? {
+            val cleanedPhrase = phrase.trim()
+            val cleanedPinyin = pinyin.trim()
+            if (cleanedPhrase.isBlank() || cleanedPinyin.isBlank()) return null
+            return HybridLexiconImporter.toEntity(
+                HybridLexiconImporter.ParsedEntry(
+                    phrase = cleanedPhrase,
+                    code = cleanedPinyin,
+                    source = HybridLexiconSource.PERSONAL,
+                    baseWeight = PERSONAL_BASE_WEIGHT,
+                ),
+            )
         }
 
         private fun rank(

@@ -59,6 +59,20 @@ interface HybridLexiconDao {
     )
     suspend fun findPinyinForPhrase(phrase: String): HybridLexiconEntity?
 
+    @Query(
+        """
+        SELECT * FROM hybrid_lexicon
+        WHERE phrase = :phrase
+          AND normalizedCode = :normalizedCode
+          AND source = 'PERSONAL'
+        LIMIT 1
+        """,
+    )
+    suspend fun findExactPersonal(
+        phrase: String,
+        normalizedCode: String,
+    ): HybridLexiconEntity?
+
     @Query("SELECT COUNT(*) FROM hybrid_lexicon WHERE source = :source")
     suspend fun countSource(source: String): Int
 

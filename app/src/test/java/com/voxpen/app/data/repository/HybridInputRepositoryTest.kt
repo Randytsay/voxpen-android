@@ -9,6 +9,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 
@@ -78,6 +79,20 @@ class HybridInputRepositoryTest {
 
         assertThat(result.first().phrase).isEqualTo("常用文")
         assertThat(result.first().initials).isEqualTo("cyw")
+    }
+
+    @Test
+    fun `learning a multi syllable personal phrase creates initials and usage`() = runTest {
+        val inserted = slot<List<HybridLexiconEntity>>()
+        coEvery { dao.insertAll(capture(inserted)) } returns listOf(41L)
+        coEvery { dao.recordSelection(41L, any()) } returns Unit
+
+        val learned = repository.learnPersonalPhrase("常用文", "chang yong wen")
+
+        assertThat(learned).isTrue()
+        assertThat(inserted.captured.single().initials).isEqualTo("cyw")
+        assertThat(inserted.captured.single().source).isEqualTo(HybridLexiconSource.PERSONAL.name)
+        coVerify(exactly = 1) { dao.recordSelection(41L, any()) }
     }
 
     @Test
