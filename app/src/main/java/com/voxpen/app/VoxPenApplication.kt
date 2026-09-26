@@ -6,6 +6,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.voxpen.app.billing.BillingManager
 import com.voxpen.app.billing.LicenseManager
+import com.voxpen.app.data.repository.HybridInputRepository
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +19,7 @@ import javax.inject.Inject
 class VoxPenApplication : Application() {
     @Inject lateinit var billingManager: BillingManager
     @Inject lateinit var licenseManager: LicenseManager
+    @Inject lateinit var hybridInputRepository: HybridInputRepository
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -27,6 +29,10 @@ class VoxPenApplication : Application() {
             Timber.plant(Timber.DebugTree())
         }
         billingManager.initialize()
+        applicationScope.launch(Dispatchers.IO) {
+            runCatching { hybridInputRepository.ensureBootstrapLexicon() }
+                .onFailure { Timber.e(it, "Unable to install the offline MixType dictionary") }
+        }
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {

@@ -7,11 +7,12 @@ import com.voxpen.app.data.local.ContextMemoryManager
 import com.voxpen.app.data.local.PersonalLearningPreferences
 import com.voxpen.app.data.local.PreferencesManager
 import com.voxpen.app.data.local.RecordingStore
+import com.voxpen.app.data.remote.StreamingRecognitionController
+import com.voxpen.app.data.repository.ClipboardRepository
 import com.voxpen.app.data.repository.CorrectionMemoryRepository
 import com.voxpen.app.data.repository.DictionaryRepository
 import com.voxpen.app.data.repository.HybridInputRepository
 import com.voxpen.app.data.repository.TranscriptionRepository
-import com.voxpen.app.data.remote.StreamingRecognitionController
 import com.voxpen.app.domain.usecase.EditTextUseCase
 import com.voxpen.app.domain.usecase.RefineTextUseCase
 import com.voxpen.app.domain.usecase.TranscribeAudioUseCase
@@ -37,6 +38,8 @@ interface VoxPenIMEEntryPoint {
     fun dictionaryRepository(): DictionaryRepository
 
     fun correctionMemoryRepository(): CorrectionMemoryRepository
+
+    fun clipboardRepository(): ClipboardRepository
 
     fun hybridInputRepository(): HybridInputRepository
 

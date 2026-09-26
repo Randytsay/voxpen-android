@@ -4,6 +4,7 @@ import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.SttProvider
 import com.voxpen.app.data.repository.SttRepository
 import com.voxpen.app.util.AudioEncoder
+import com.voxpen.app.util.ChinesePunctuationNormalizer
 import com.voxpen.app.util.LiveAudioChunker
 import javax.inject.Inject
 
@@ -48,7 +49,8 @@ class TranscribeAudioUseCase
                     onFailure = { return Result.failure(it) },
                 )
             }
-            return Result.success(textChunks.filter { it.isNotBlank() }.joinToString(" "))
+            val combined = textChunks.filter { it.isNotBlank() }.joinToString(" ")
+            return Result.success(ChinesePunctuationNormalizer.normalize(combined))
         }
 
         companion object {

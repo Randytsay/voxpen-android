@@ -31,7 +31,9 @@ import com.voxpen.app.data.model.ToneStyle
 import com.voxpen.app.data.model.VoiceCommand
 import com.voxpen.app.data.repository.CorrectionMemoryRepository
 import com.voxpen.app.domain.usecase.EditTextUseCase
+import com.voxpen.app.ime.hybrid.HybridKeyboardPanel
 import com.voxpen.app.ui.MainActivity
+import com.voxpen.app.util.ChinesePunctuationNormalizer
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -80,6 +82,7 @@ class VoxPenIME : InputMethodService() {
     private var translationIndicatorRow: LinearLayout? = null
     private var translationLabel: TextView? = null
     private var translationCloseButton: ImageButton? = null
+    private var hybridKeyboardPanel: HybridKeyboardPanel? = null
 
     // Translation state (synced from preferences)
     @Volatile private var translationEnabled: Boolean = PreferencesManager.DEFAULT_TRANSLATION_ENABLED
@@ -88,6 +91,10 @@ class VoxPenIME : InputMethodService() {
     @Volatile private var currentSttLanguage: SttLanguage = SttLanguage.Auto
     @Volatile private var autoInsertResult: Boolean = PreferencesManager.DEFAULT_AUTO_INSERT_RESULT
     private var recordingStartJob: Job? = null
+    private var inputSessionGeneration = 0L
+    private var voiceInputSessionGeneration = -1L
+    private var inputSelectionGeneration = 0L
+    private var voiceInputSelectionGeneration = -1L
 
     // Audio focus for ducking other apps during recording
     private var audioManager: AudioManager? = null
@@ -250,15 +257,15 @@ class VoxPenIME : InputMethodService() {
         translationIndicatorRow = view.findViewById(R.id.translation_indicator_row)
         translationLabel = view.findViewById(R.id.translation_label)
         translationCloseButton = view.findViewById(R.id.btn_translation_close)
+        hybridKeyboardPanel = view.findViewById(R.id.hybrid_keyboard_panel)
+        hybridKeyboardPanel?.attachInputMethodService(this)
+        hybridKeyboardPanel?.attachCandidateToolbar(
+            toolbar = view.findViewById(R.id.hybrid_candidate_toolbar),
+            compositionCode = view.findViewById(R.id.hybrid_composition_code),
+        )
     }
 
     private fun bindButtons(view: View) {
-        view.findViewById<ImageButton>(R.id.btn_backspace)?.setOnClickListener {
-            actionHandler.handle(KeyboardAction.Backspace)
-        }
-        view.findViewById<ImageButton>(R.id.btn_enter)?.setOnClickListener {
-            actionHandler.handle(KeyboardAction.Enter)
-        }
         view.findViewById<ImageButton>(R.id.btn_switch)?.let { switchBtn ->
             switchBtn.setOnClickListener {
                 actionHandler.handle(KeyboardAction.SwitchKeyboard)
@@ -275,6 +282,12 @@ class VoxPenIME : InputMethodService() {
                 showQuickSettings(it)
                 true
             }
+        }
+        view.findViewById<TextView>(R.id.btn_edit_shortcut)?.setOnClickListener {
+            hybridKeyboardPanel?.toggleEditScreen()
+        }
+        view.findViewById<TextView>(R.id.btn_dictionary_shortcut)?.setOnClickListener {
+            hybridKeyboardPanel?.showDictionaryScreen()
         }
         setupMicButton(view.findViewById(R.id.btn_mic))
         view.findViewById<TextView>(R.id.btn_tone)?.setOnClickListener {
@@ -341,6 +354,10 @@ class VoxPenIME : InputMethodService() {
 
     private fun startRecording() {
         if (recordingStartJob?.isActive == true) return
+        if (hybridKeyboardPanel?.hasPendingComposition() == true) {
+            showStatusRow("請先完成或清除目前的拼音組字，再開始語音辨識。", showProgress = false)
+            return
+        }
         if (!audioRecorder.hasPermission()) {
             candidateBar?.visibility = View.VISIBLE
             candidateText?.text = getString(R.string.mic_permission_required)
@@ -349,6 +366,8 @@ class VoxPenIME : InputMethodService() {
         }
 
         learnFromPendingManualEdit()
+        voiceInputSessionGeneration = inputSessionGeneration
+        voiceInputSelectionGeneration = inputSelectionGeneration
         requestAudioDucking()
         recordingStartTime = 0L
         recordingStartJob = serviceScope.launch {
@@ -478,10 +497,50 @@ class VoxPenIME : InputMethodService() {
         if (state == previousUiState) return
         previousUiState = state
 
+        if (isVoiceSessionStale() && isFinalVoiceState(state)) {
+            showStaleVoiceResult(state)
+            return
+        }
+
         triggerStateFeedback(state)
         resetClickListeners()
         updateCandidateBar(state)
         updateMicAppearance(state)
+    }
+
+    private fun isFinalVoiceState(state: ImeUiState): Boolean =
+        state is ImeUiState.Result || state is ImeUiState.Refined ||
+            state is ImeUiState.CommandDetected || state is ImeUiState.EditInstruction ||
+            state is ImeUiState.EditResult
+
+    private fun isVoiceSessionStale(): Boolean =
+        voiceInputSessionGeneration != inputSessionGeneration ||
+            voiceInputSelectionGeneration != inputSelectionGeneration
+
+    private fun showStaleVoiceResult(state: ImeUiState) {
+        timerHandler.removeCallbacks(timerRunnable)
+        when (state) {
+            is ImeUiState.Result -> {
+                val text = ChinesePunctuationNormalizer.normalize(state.text)
+                showStatusRow("輸入欄位已切換，未自動插入：$text", showProgress = false)
+                copyStatusButton?.visibility = View.VISIBLE
+                copyStatusButton?.setOnClickListener { copyToClipboard(text) }
+            }
+            is ImeUiState.Refined -> {
+                val original = ChinesePunctuationNormalizer.normalize(state.original)
+                val refined = ChinesePunctuationNormalizer.normalize(state.refined)
+                showDualRows(original, refined)
+                candidateStatusRow?.let { row ->
+                    row.visibility = View.VISIBLE
+                    candidateText?.text = "輸入欄位已切換，結果未插入（可複製）"
+                }
+                copyStatusButton?.visibility = View.VISIBLE
+                copyStatusButton?.setOnClickListener { copyToClipboard(original) }
+                copyRefinedButton?.visibility = View.VISIBLE
+                copyRefinedButton?.setOnClickListener { copyToClipboard(refined) }
+            }
+            else -> showStatusRow("輸入欄位已切換，舊語音結果未執行。", showProgress = false)
+        }
     }
 
     private fun triggerStateFeedback(state: ImeUiState) {
@@ -551,29 +610,32 @@ class VoxPenIME : InputMethodService() {
             }
             is ImeUiState.Result -> {
                 timerHandler.removeCallbacks(timerRunnable)
-                showStatusRow(state.text, showProgress = false)
+                val normalizedText = ChinesePunctuationNormalizer.normalize(state.text)
+                showStatusRow(normalizedText, showProgress = false)
                 candidateBar?.setOnClickListener {
-                    commitCandidateText(state.text)
+                    commitCandidateText(normalizedText)
                 }
                 copyStatusButton?.visibility = View.VISIBLE
-                copyStatusButton?.setOnClickListener { copyToClipboard(state.text) }
+                copyStatusButton?.setOnClickListener { copyToClipboard(normalizedText) }
                 maybeAutoInsert(state)
             }
             is ImeUiState.Refining -> {
                 timerHandler.removeCallbacks(timerRunnable)
-                showDualRows(state.original, null)
+                showDualRows(ChinesePunctuationNormalizer.normalize(state.original), null)
             }
             is ImeUiState.Refined -> {
                 timerHandler.removeCallbacks(timerRunnable)
-                showDualRows(state.original, state.refined)
+                val normalizedOriginal = ChinesePunctuationNormalizer.normalize(state.original)
+                val normalizedRefined = ChinesePunctuationNormalizer.normalize(state.refined)
+                showDualRows(normalizedOriginal, normalizedRefined)
                 candidateOriginal?.setOnClickListener {
-                    commitCandidateText(state.original)
+                    commitCandidateText(normalizedOriginal)
                 }
                 candidateRefinedRow?.setOnClickListener {
-                    commitCandidateText(state.refined)
+                    commitCandidateText(normalizedRefined)
                 }
                 copyRefinedButton?.visibility = View.VISIBLE
-                copyRefinedButton?.setOnClickListener { copyToClipboard(state.refined) }
+                copyRefinedButton?.setOnClickListener { copyToClipboard(normalizedRefined) }
                 maybeAutoInsert(state)
             }
             is ImeUiState.Error -> {
@@ -596,7 +658,8 @@ class VoxPenIME : InputMethodService() {
             }
             is ImeUiState.EditResult -> {
                 timerHandler.removeCallbacks(timerRunnable)
-                currentInputConnection?.commitText(state.revised, 1)
+                val normalizedRevised = ChinesePunctuationNormalizer.normalize(state.revised)
+                currentInputConnection?.commitText(normalizedRevised, 1)
                 isEditMode = false
                 recordingController.dismiss()
             }
@@ -611,16 +674,18 @@ class VoxPenIME : InputMethodService() {
     /** Commits candidate text without losing it when the current editor is unavailable. */
     private fun commitCandidateText(text: String): Boolean {
         if (text.isBlank()) return false
+        if (isVoiceSessionStale()) return false
         val connection = currentInputConnection ?: return false
-        val committed = runCatching { connection.commitText(text, 1) }.getOrDefault(false)
+        val normalized = ChinesePunctuationNormalizer.normalize(text)
+        val committed = runCatching { connection.commitText(normalized, 1) }.getOrDefault(false)
         if (committed) {
-            rememberCommittedText(text)
+            rememberCommittedText(normalized)
             val packageName = currentEditorPackageName
             val inputType = currentEditorInputType
             if (packageName.isNotBlank() && ImePrivacyPolicy.shouldUseContext(inputType)) {
                 serviceScope.launch {
                     runCatching {
-                        contextMemoryManager.append(packageName, text)
+                        contextMemoryManager.append(packageName, normalized)
                     }.onFailure { Timber.w(it, "context_memory_append_failed") }
                 }
             }
@@ -988,7 +1053,8 @@ class VoxPenIME : InputMethodService() {
 
             result.fold(
                 onSuccess = { revised ->
-                    currentInputConnection?.commitText(revised, 1)
+                    val normalizedRevised = ChinesePunctuationNormalizer.normalize(revised)
+                    currentInputConnection?.commitText(normalizedRevised, 1)
                     isEditMode = false
                     recordingController.dismiss()
                 },
@@ -1111,9 +1177,7 @@ class VoxPenIME : InputMethodService() {
         val tooltips =
             mapOf(
                 R.id.btn_switch to getString(R.string.keyboard_switch),
-                R.id.btn_backspace to getString(R.string.keyboard_backspace),
                 R.id.btn_mic to getString(R.string.keyboard_record),
-                R.id.btn_enter to getString(R.string.keyboard_enter),
                 R.id.btn_settings to getString(R.string.keyboard_settings),
                 R.id.btn_tone to getString(R.string.keyboard_tone),
             )
@@ -1226,8 +1290,10 @@ class VoxPenIME : InputMethodService() {
         info: EditorInfo,
         restarting: Boolean,
     ) {
+        inputSessionGeneration++
         flushAndClearCorrectionObservation()
         super.onStartInput(info, restarting)
+        hybridKeyboardPanel?.resetToMain()
         currentEditorPackageName = info.packageName.orEmpty()
         currentEditorInputType = info.inputType
         if (autoToneEnabled) {
@@ -1260,6 +1326,7 @@ class VoxPenIME : InputMethodService() {
             candidatesStart,
             candidatesEnd,
         )
+        if (oldSelStart != newSelStart || oldSelEnd != newSelEnd) inputSelectionGeneration++
         scheduleManualEditObservation()
     }
 
@@ -1269,6 +1336,7 @@ class VoxPenIME : InputMethodService() {
     }
 
     override fun onFinishInput() {
+        inputSessionGeneration++
         flushAndClearCorrectionObservation()
         super.onFinishInput()
     }

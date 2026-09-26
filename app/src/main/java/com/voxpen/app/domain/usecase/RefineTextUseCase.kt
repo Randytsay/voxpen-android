@@ -6,6 +6,7 @@ import com.voxpen.app.data.model.RefinementContext
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.ToneStyle
 import com.voxpen.app.data.repository.LlmRepository
+import com.voxpen.app.util.ChinesePunctuationNormalizer
 import javax.inject.Inject
 
 class RefineTextUseCase
@@ -42,5 +43,5 @@ class RefineTextUseCase
                 targetLanguage = targetLanguage,
                 correctionHints = correctionHints,
                 refinementContext = refinementContext,
-            )
+            ).map { ChinesePunctuationNormalizer.normalize(it) }
     }

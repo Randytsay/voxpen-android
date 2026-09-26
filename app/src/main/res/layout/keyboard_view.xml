@@ -150,78 +150,126 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Container for toolbar and semi-transparent floating candidate window -->
+    <FrameLayout
+        android:id="@+id/toolbar_container"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp">
+
+        <!-- Compact VoxPen toolbar matching the approved keyboard mockup. -->
+        <LinearLayout
+            android:id="@+id/voxpen_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_gravity="center_vertical"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp">
+
+            <ImageButton
+                android:id="@+id/btn_mic"
+                android:layout_width="48dp"
+                android:layout_height="38dp"
+                android:layout_weight="0"
+                android:background="@color/key_background"
+                android:contentDescription="@string/keyboard_record"
+                android:src="@drawable/ic_mic"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:layout_margin="2dp" />
+
+            <TextView
+                android:id="@+id/btn_tone"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/key_background"
+                android:gravity="center"
+                android:textSize="20sp"
+                android:text="語音"
+                android:textColor="@color/key_text"
+                android:layout_margin="2dp" />
+
+            <TextView
+                android:id="@+id/btn_edit_shortcut"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/key_background"
+                android:gravity="center"
+                android:text="編輯"
+                android:textColor="@color/key_text"
+                android:textSize="14sp"
+                android:layout_margin="2dp" />
+
+            <TextView
+                android:id="@+id/btn_dictionary_shortcut"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/key_background"
+                android:gravity="center"
+                android:text="詞庫"
+                android:textColor="@color/key_text"
+                android:textSize="14sp"
+                android:layout_margin="2dp" />
+
+            <ImageButton
+                android:id="@+id/btn_switch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/key_background"
+                android:contentDescription="@string/keyboard_switch"
+                android:src="@drawable/ic_language"
+                android:layout_margin="2dp" />
+
+            <ImageButton
+                android:id="@+id/btn_settings"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/key_background"
+                android:contentDescription="@string/keyboard_settings"
+                android:src="@drawable/ic_settings"
+                android:layout_margin="2dp" />
+        </LinearLayout>
+
+        <!-- The code floats above candidates; neither row overlays the editor's composing text. -->
+        <TextView
+            android:id="@+id/hybrid_composition_code"
+            android:layout_width="wrap_content"
+            android:layout_height="22dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="2dp"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:paddingStart="9dp"
+            android:paddingEnd="9dp"
+            android:textColor="#FFF4F5F8"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:elevation="8dp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/hybrid_candidate_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_gravity="bottom"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:elevation="6dp"
+            android:visibility="gone" />
+    </FrameLayout>
+
     <!-- Hybrid Boshiamy + Pinyin text keyboard. It owns text composition locally. -->
     <com.voxpen.app.ime.hybrid.HybridKeyboardPanel
         android:id="@+id/hybrid_keyboard_panel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
-
-    <!-- Existing VoxPen voice / AI toolbar -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:orientation="horizontal"
-        android:gravity="center">
-
-        <ImageButton
-            android:id="@+id/btn_switch"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@color/key_background"
-            android:contentDescription="@string/keyboard_switch"
-            android:src="@drawable/ic_language"
-            android:layout_margin="2dp" />
-
-        <ImageButton
-            android:id="@+id/btn_backspace"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@color/key_background"
-            android:contentDescription="@string/keyboard_backspace"
-            android:src="@drawable/ic_backspace"
-            android:layout_margin="2dp" />
-
-        <ImageButton
-            android:id="@+id/btn_mic"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="2"
-            android:background="@color/mic_idle"
-            android:contentDescription="@string/keyboard_record"
-            android:src="@drawable/ic_mic"
-            android:layout_margin="2dp" />
-
-        <TextView
-            android:id="@+id/btn_tone"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@color/key_background"
-            android:gravity="center"
-            android:textSize="20sp"
-            android:text="\uD83D\uDCAC"
-            android:layout_margin="2dp" />
-
-        <ImageButton
-            android:id="@+id/btn_enter"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@color/key_background"
-            android:contentDescription="@string/keyboard_enter"
-            android:src="@drawable/ic_keyboard_return"
-            android:layout_margin="2dp" />
-
-        <ImageButton
-            android:id="@+id/btn_settings"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@color/key_background"
-            android:contentDescription="@string/keyboard_settings"
-            android:src="@drawable/ic_settings"
-            android:layout_margin="2dp" />
-    </LinearLayout>
 </LinearLayout>

@@ -20,6 +20,7 @@ import com.voxpen.app.data.repository.DictionaryRepository
 import com.voxpen.app.data.repository.TranscriptionRepository
 import com.voxpen.app.domain.usecase.RefineTextUseCase
 import com.voxpen.app.domain.usecase.TranscribeAudioUseCase
+import com.voxpen.app.util.ChinesePunctuationNormalizer
 import com.voxpen.app.util.ChirpAdaptationBuilder
 import com.voxpen.app.util.ChirpLanguageMapper
 import com.voxpen.app.util.RecordingValidator
@@ -421,7 +422,8 @@ class RecordingController(
                 }
 
             result.fold(
-                onSuccess = { originalText ->
+                onSuccess = { rawText ->
+                    val originalText = ChinesePunctuationNormalizer.normalize(rawText)
                     if (!proStatus.isPro) {
                         usageLimiter
                             .incrementVoiceInput()
@@ -571,7 +573,7 @@ class RecordingController(
                             onSuccess = {
                                 ImeUiState.Refined(
                                     correctedOriginalText,
-                                    it,
+                                    ChinesePunctuationNormalizer.normalize(it),
                                 )
                             },
                             onFailure = {
@@ -643,7 +645,10 @@ class RecordingController(
 
             override fun onPreview(snapshot: StreamingTranscriptSnapshot) {
                 if (streamingLivePreview) {
-                    _uiState.value = ImeUiState.Streaming(snapshot.previewText, statusLabel)
+                    _uiState.value = ImeUiState.Streaming(
+                        ChinesePunctuationNormalizer.normalize(snapshot.previewText),
+                        statusLabel,
+                    )
                 }
             }
 
@@ -664,10 +669,16 @@ class RecordingController(
                     val snapshot = activeStreamingSession?.snapshot() ?: return
                     _uiState.value =
                         if (status == StreamingStatus.Finalizing) {
-                            ImeUiState.Finalizing(snapshot.previewText)
+                            ImeUiState.Finalizing(
+                                ChinesePunctuationNormalizer.normalize(snapshot.previewText),
+                            )
                         } else {
                             ImeUiState.Streaming(
-                                if (streamingLivePreview) snapshot.previewText else "",
+                                if (streamingLivePreview) {
+                                    ChinesePunctuationNormalizer.normalize(snapshot.previewText)
+                                } else {
+                                    ""
+                                },
                                 statusLabel,
                             )
                         }

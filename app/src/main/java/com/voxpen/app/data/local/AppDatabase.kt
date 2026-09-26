@@ -11,8 +11,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DictionaryEntry::class,
         CorrectionMemoryEntity::class,
         HybridLexiconEntity::class,
+        HybridLearningEntity::class,
+        ClipboardEntry::class,
     ],
-    version = 6,
+    version = 9,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,6 +25,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun correctionMemoryDao(): CorrectionMemoryDao
 
     abstract fun hybridLexiconDao(): HybridLexiconDao
+
+    abstract fun clipboardDao(): ClipboardDao
 
     companion object {
         val MIGRATION_1_2 =
@@ -125,6 +129,65 @@ abstract class AppDatabase : RoomDatabase() {
                     db.execSQL(
                         "CREATE UNIQUE INDEX IF NOT EXISTS index_hybrid_lexicon_phrase_normalizedCode_source ON hybrid_lexicon (phrase, normalizedCode, source)",
                     )
+                }
+            }
+
+        val MIGRATION_6_7 =
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS clipboard_entries (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            text TEXT NOT NULL,
+                            type TEXT NOT NULL,
+                            groupName TEXT NOT NULL,
+                            isPinned INTEGER NOT NULL,
+                            usageCount INTEGER NOT NULL,
+                            createdAt INTEGER NOT NULL,
+                            updatedAt INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_clipboard_entries_type_updatedAt " +
+                            "ON clipboard_entries (type, updatedAt)",
+                    )
+                    db.execSQL(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS index_clipboard_entries_type_text_groupName " +
+                            "ON clipboard_entries (type, text, groupName)",
+                    )
+                }
+            }
+
+        val MIGRATION_7_8 =
+            object : Migration(7, 8) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE hybrid_lexicon ADD COLUMN personalKind TEXT NOT NULL DEFAULT 'LEGACY'")
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS hybrid_learning (
+                            phrase TEXT NOT NULL,
+                            normalizedCode TEXT NOT NULL,
+                            reading TEXT NOT NULL,
+                            kind TEXT NOT NULL,
+                            selectionCount INTEGER NOT NULL,
+                            lastSelectedAt INTEGER NOT NULL,
+                            PRIMARY KEY (phrase, normalizedCode, kind)
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_hybrid_learning_normalizedCode_kind " +
+                            "ON hybrid_learning (normalizedCode, kind)",
+                    )
+                }
+            }
+
+        val MIGRATION_8_9 =
+            object : Migration(8, 9) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE hybrid_lexicon ADD COLUMN frequencyWeight REAL DEFAULT NULL")
                 }
             }
     }
