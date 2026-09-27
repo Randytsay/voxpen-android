@@ -11,7 +11,8 @@ interface HybridLexiconDao {
         """
         SELECT * FROM hybrid_lexicon
         WHERE source = :source
-          AND normalizedCode LIKE :prefix || '%'
+          AND normalizedCode >= :prefix
+          AND normalizedCode < (:prefix || '{')
         ORDER BY
           CASE WHEN normalizedCode = :prefix THEN 0 ELSE 1 END,
           CASE WHEN usageCount >= 3 THEN usageCount ELSE 0 END DESC,
@@ -31,7 +32,8 @@ interface HybridLexiconDao {
         """
         SELECT * FROM hybrid_lexicon
         WHERE source != 'BOSHIAMY'
-          AND normalizedCode LIKE :prefix || '%'
+          AND normalizedCode >= :prefix
+          AND normalizedCode < (:prefix || '{')
         ORDER BY
           CASE WHEN normalizedCode = :prefix THEN 0 ELSE 1 END,
           CASE WHEN usageCount >= 3 THEN usageCount ELSE 0 END DESC,
@@ -49,8 +51,51 @@ interface HybridLexiconDao {
     @Query(
         """
         SELECT * FROM hybrid_lexicon
+        WHERE source = 'PERSONAL'
+          AND (
+            (normalizedCode >= :prefix AND normalizedCode < (:prefix || '{'))
+            OR (initials >= :prefix AND initials < (:prefix || '{'))
+          )
+        ORDER BY
+          CASE WHEN normalizedCode = :prefix OR initials = :prefix THEN 0 ELSE 1 END,
+          CASE WHEN usageCount >= 3 THEN usageCount ELSE 0 END DESC,
+          frequencyWeight DESC,
+          baseWeight DESC,
+          id ASC
+        LIMIT :limit
+        """,
+    )
+    suspend fun searchPersonalPrefix(
+        prefix: String,
+        limit: Int,
+    ): List<HybridLexiconEntity>
+
+    @Query(
+        """
+        SELECT * FROM hybrid_lexicon
         WHERE source != 'BOSHIAMY'
-          AND initials LIKE :prefix || '%'
+          AND normalizedCode = :normalizedCode
+          AND length(phrase) = 1
+          AND (:toneFilter = 0 OR substr(toneCode, 1, 1) = CAST(:toneFilter AS TEXT))
+        ORDER BY
+          CASE WHEN source = 'PERSONAL' THEN 0 ELSE 1 END,
+          CASE WHEN usageCount >= 3 THEN usageCount ELSE 0 END DESC,
+          frequencyWeight DESC,
+          baseWeight DESC,
+          id ASC
+        """,
+    )
+    suspend fun searchSingleSyllableCharacters(
+        normalizedCode: String,
+        toneFilter: Int,
+    ): List<HybridLexiconEntity>
+
+    @Query(
+        """
+        SELECT * FROM hybrid_lexicon
+        WHERE source != 'BOSHIAMY'
+          AND initials >= :prefix
+          AND initials < (:prefix || '{')
         ORDER BY
           CASE WHEN initials = :prefix THEN 0 ELSE 1 END,
           CASE WHEN usageCount >= 3 THEN usageCount ELSE 0 END DESC,

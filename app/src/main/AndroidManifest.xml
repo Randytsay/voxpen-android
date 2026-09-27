@@ -30,6 +30,12 @@
             android:exported="false"
             android:theme="@style/Theme.VoxPen" />
 
+        <activity
+            android:name=".ime.hybrid.PhraseManagerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VoxPen"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- IME Service -->
         <service
             android:name=".ime.VoxPenIME"

@@ -85,6 +85,7 @@ class HybridLexiconImporterTest {
         assertThat(entity.code).isEqualTo("yao bu yao")
         assertThat(entity.normalizedCode).isEqualTo("yaobuyao")
         assertThat(entity.initials).isEqualTo("yby")
+        assertThat(entity.toneCode).isEqualTo("424")
         assertThat(entity.frequencyWeight).isEqualTo(22258.0)
         assertThat(entity.source).isEqualTo(HybridLexiconSource.MIXTYPE.name)
     }
@@ -95,6 +96,8 @@ class HybridLexiconImporterTest {
         assertThat(MixTypeLexiconImporter.zhuyinToPinyin("ㄓㄨㄥ ㄍㄨㄛˊ")).isEqualTo("zhong guo")
         assertThat(MixTypeLexiconImporter.zhuyinToPinyin("ㄌㄩˋ ㄧㄡˊ")).isEqualTo("lv you")
         assertThat(MixTypeLexiconImporter.zhuyinToPinyin("ㄐㄩㄥˇ")).isEqualTo("jiong")
+        assertThat(MixTypeLexiconImporter.zhuyinToneCode("ㄧㄠˋ ㄅㄨˊ ㄧㄠˋ")).isEqualTo("424")
+        assertThat(MixTypeLexiconImporter.zhuyinToneCode("ㄧㄠ")).isEqualTo("1")
     }
 
     @Test
@@ -103,6 +106,7 @@ class HybridLexiconImporterTest {
 
         assertThat(parsed?.phrase).isEqualTo("要")
         assertThat(parsed?.code).isEqualTo("yao")
+        assertThat(HybridLexiconImporter.toEntity(checkNotNull(parsed)).toneCode).isEqualTo("4")
         assertThat(parsed?.frequencyWeight).isEqualTo(500.0)
     }
 
@@ -118,6 +122,7 @@ class HybridLexiconImporterTest {
         var parsedCount = 0
         val uniqueRows = mutableSetOf<Pair<String, String>>()
         val ybyCandidates = mutableMapOf<String, Double>()
+        val yaoToneEntries = mutableListOf<String>()
         ZipInputStream(checkNotNull(archiveFile).inputStream()).use { archive ->
             while (true) {
                 val entry = archive.nextEntry ?: break
@@ -133,6 +138,9 @@ class HybridLexiconImporterTest {
                         if (entity.initials == "yby" && entity.normalizedCode == "yaobuyao") {
                             ybyCandidates.putIfAbsent(entity.phrase, entity.frequencyWeight ?: 0.0)
                         }
+                        if (entity.phrase == "耀" && entity.normalizedCode == "yao") {
+                            yaoToneEntries += entity.toneCode
+                        }
                     }
                 }
                 archive.closeEntry()
@@ -143,6 +151,7 @@ class HybridLexiconImporterTest {
         assertThat(uniqueRows.size).isAtLeast(200_000)
         assertThat(ybyCandidates).containsKey("要不要")
         assertThat(ybyCandidates.entries.maxByOrNull { it.value }?.key).isEqualTo("要不要")
+        assertThat(yaoToneEntries).contains("4")
     }
 
     @Test
@@ -174,5 +183,16 @@ class HybridLexiconImporterTest {
         assertThat(parsed[0].code).isEqualTo("bao gu")
         assertThat(parsed[1].phrase).isEqualTo("表格")
         assertThat(parsed[1].code).isEqualTo("biao ge")
+    }
+
+    @Test
+    fun `baidu text parser skips localized csv header`() {
+        val raw = "詞語,拼音\n姍靈,shan ling\n"
+
+        val parsed = HybridLexiconImporter.parseBaiduText(raw)
+
+        assertThat(parsed).hasSize(1)
+        assertThat(parsed.single().phrase).isEqualTo("姍靈")
+        assertThat(parsed.single().code).isEqualTo("shan ling")
     }
 }

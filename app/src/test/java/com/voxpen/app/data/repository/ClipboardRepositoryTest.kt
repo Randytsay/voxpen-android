@@ -75,7 +75,7 @@ class ClipboardRepositoryTest {
         }
 
     @Test
-    fun `common phrase is pinned and symbols use their own type`() =
+    fun `common phrase is not automatically pinned and symbols use their own type`() =
         runTest {
             coEvery { dao.findExact(any(), any(), any()) } returns null
             coEvery { dao.insert(any()) } returnsMany listOf(1L, 2L)
@@ -84,7 +84,26 @@ class ClipboardRepositoryTest {
             assertThat(repository.addCommonPhrase("回覆內容")).isTrue()
             assertThat(repository.addSymbol("→")).isTrue()
 
-            coVerify { dao.insert(match { it.type == ClipboardEntryType.COMMON.name && it.isPinned }) }
+            coVerify { dao.insert(match { it.type == ClipboardEntryType.COMMON.name && !it.isPinned && !it.isFavorite }) }
             coVerify { dao.insert(match { it.type == ClipboardEntryType.SYMBOL.name && it.isPinned }) }
+        }
+
+    @Test
+    fun `saving an existing common phrase does not count as using it`() =
+        runTest {
+            val existing =
+                ClipboardEntry(
+                    id = 12,
+                    text = "測試片語",
+                    type = ClipboardEntryType.COMMON.name,
+                    createdAt = 1,
+                    updatedAt = 1,
+                )
+            coEvery { dao.findExact(ClipboardEntryType.COMMON.name, "測試片語", "") } returns existing
+
+            assertThat(repository.addCommonPhrase("測試片語")).isTrue()
+
+            coVerify(exactly = 0) { dao.touch(any(), any()) }
+            coVerify(exactly = 0) { dao.insert(any()) }
         }
 }

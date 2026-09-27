@@ -11,7 +11,7 @@ interface ClipboardDao {
         """
         SELECT * FROM clipboard_entries
         WHERE type = :type
-        ORDER BY isPinned DESC, updatedAt DESC, usageCount DESC
+        ORDER BY isPinned DESC, isFavorite DESC, updatedAt DESC, usageCount DESC
         """,
     )
     suspend fun getByType(type: String): List<ClipboardEntry>
@@ -29,6 +29,25 @@ interface ClipboardDao {
         groupName: String,
     ): ClipboardEntry?
 
+    @Query(
+        """
+        SELECT * FROM clipboard_entries
+        WHERE type = 'COMMON' AND shortcut != '' AND lower(shortcut) = lower(:shortcut)
+        LIMIT 1
+        """,
+    )
+    suspend fun findByShortcut(shortcut: String): ClipboardEntry?
+
+    @Query(
+        """
+        SELECT * FROM clipboard_entries
+        WHERE type = 'COMMON' AND shortcut != '' AND lower(shortcut) = lower(:shortcut)
+        ORDER BY isPinned DESC, usageCount DESC, updatedAt DESC
+        LIMIT 5
+        """,
+    )
+    suspend fun findShortcutMatches(shortcut: String): List<ClipboardEntry>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entry: ClipboardEntry): Long
 
@@ -36,6 +55,7 @@ interface ClipboardDao {
         """
         UPDATE clipboard_entries
         SET updatedAt = :now,
+            lastUsedAt = :now,
             usageCount = usageCount + 1
         WHERE id = :id
         """,
@@ -59,10 +79,36 @@ interface ClipboardDao {
         now: Long,
     )
 
+    @Query(
+        """
+        UPDATE clipboard_entries
+        SET text = :text,
+            groupName = :groupName,
+            shortcut = :shortcut,
+            label = :label,
+            updatedAt = :now
+        WHERE id = :id
+        """,
+    )
+    suspend fun updateCommonPhrase(
+        id: Long,
+        text: String,
+        groupName: String,
+        shortcut: String,
+        label: String,
+        now: Long,
+    )
+
     @Query("UPDATE clipboard_entries SET isPinned = :pinned WHERE id = :id")
     suspend fun setPinned(
         id: Long,
         pinned: Boolean,
+    )
+
+    @Query("UPDATE clipboard_entries SET isFavorite = :favorite WHERE id = :id")
+    suspend fun setFavorite(
+        id: Long,
+        favorite: Boolean,
     )
 
     @Query("DELETE FROM clipboard_entries WHERE id = :id")

@@ -12,7 +12,7 @@ import androidx.room.PrimaryKey
         Index(value = ["initials"]),
         Index(value = ["source"]),
         Index(
-            value = ["phrase", "normalizedCode", "source"],
+            value = ["phrase", "normalizedCode", "source", "toneCode"],
             unique = true,
         ),
     ],
@@ -33,6 +33,8 @@ data class HybridLexiconEntity(
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(defaultValue = "'LEGACY'")
     val personalKind: String = "NONE",
+    @ColumnInfo(defaultValue = "''")
+    val toneCode: String = "",
 )
 
 @Entity(
@@ -81,4 +83,5 @@ data class HybridCandidate(
     val baseWeight: Int,
     val personalKind: String = "NONE",
     val frequencyWeight: Double? = null,
+    val toneCode: String = "",
 )

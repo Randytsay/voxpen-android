@@ -149,8 +149,12 @@
 
     <!-- Keyboard Accessibility -->
     <string name="keyboard_switch">Switch keyboard</string>
+    <string name="keyboard_main">Main keyboard</string>
     <string name="keyboard_backspace">Backspace</string>
     <string name="keyboard_record">Record</string>
+    <string name="keyboard_edit">Edit</string>
+    <string name="keyboard_emoji">Emoji</string>
+    <string name="keyboard_dictionary">Dictionary</string>
     <string name="keyboard_enter">Enter</string>
     <string name="keyboard_settings">Settings</string>
     <string name="copy_to_clipboard">Copy to clipboard</string>

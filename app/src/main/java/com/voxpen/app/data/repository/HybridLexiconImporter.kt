@@ -11,6 +11,7 @@ object HybridLexiconImporter {
         val baseWeight: Int = 0,
         val frequencyWeight: Double? = null,
         val personalKind: String = "NONE",
+        val toneCode: String = "",
     )
 
     fun parseRimeDictionary(
@@ -105,15 +106,23 @@ object HybridLexiconImporter {
                 line.split(Regex("[\\t,|;]+"))
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
+            if (isBaiduTextHeader(columns)) return@mapNotNull null
 
             val phrase = columns.firstOrNull(::containsCjk) ?: return@mapNotNull null
             val pinyin = columns.firstOrNull(::looksLikePinyin)
             ParsedEntry(
                 phrase = phrase,
                 code = pinyin.orEmpty(),
-                source = HybridLexiconSource.BAIDU,
-            )
-        }.toList()
+            source = HybridLexiconSource.BAIDU,
+        )
+    }.toList()
+
+    private fun isBaiduTextHeader(columns: List<String>): Boolean {
+        val values = columns.map { it.trim().removePrefix("\uFEFF").lowercase() }.toSet()
+        val phraseHeaders = setOf("詞語", "词语", "詞條", "词条", "短語", "短语", "中文", "phrase", "word", "text")
+        val readingHeaders = setOf("拼音", "讀音", "读音", "pinyin", "reading", "pronunciation")
+        return values.any(phraseHeaders::contains) && values.any(readingHeaders::contains)
+    }
 
     fun toEntity(entry: ParsedEntry): HybridLexiconEntity {
         val normalized = normalizeCode(entry.code)
@@ -126,6 +135,7 @@ object HybridLexiconImporter {
             baseWeight = entry.baseWeight,
             frequencyWeight = entry.frequencyWeight,
             personalKind = entry.personalKind,
+            toneCode = entry.toneCode.ifBlank { PinyinToneCode.fromReading(entry.code) },
         )
     }
 
@@ -145,6 +155,6 @@ object HybridLexiconImporter {
         val compact = value.lowercase().replace("ü", "v")
         return compact.isNotBlank() &&
             compact.any { it in 'a'..'z' } &&
-            compact.all { it in 'a'..'z' || it == ' ' || it == '\'' }
+            PinyinInputSegmentor.isValidReading(compact)
     }
 }

@@ -149,8 +149,12 @@
 
     <!-- Keyboard Accessibility -->
     <string name="keyboard_switch">切換鍵盤</string>
+    <string name="keyboard_main">主鍵盤</string>
     <string name="keyboard_backspace">退格</string>
     <string name="keyboard_record">錄音</string>
+    <string name="keyboard_edit">編輯</string>
+    <string name="keyboard_emoji">表情符號</string>
+    <string name="keyboard_dictionary">詞庫</string>
     <string name="keyboard_enter">換行</string>
     <string name="keyboard_settings">設定</string>
     <string name="copy_to_clipboard">複製到剪貼簿</string>

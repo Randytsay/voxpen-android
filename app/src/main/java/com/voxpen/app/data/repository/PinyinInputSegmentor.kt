@@ -220,3 +220,49 @@ object PinyinInputSegmentor {
         zha zhai zhan zhang zhao zhe zhei zhen zheng zhi zhong zhou zhu zhua zhuai zhuan zhuang zhui zhun zhuo
         """
 }
+
+/** Tone numbers aligned to Pinyin syllables; 0 means that the reading did not mark a tone. */
+internal object PinyinToneCode {
+    fun fromReading(reading: String): String {
+        val syllables = PinyinInputSegmentor.dictionarySyllables(reading)
+        if (syllables.isEmpty()) return ""
+
+        val normalized =
+            Normalizer.normalize(
+                reading.lowercase().replace("u:", "ü"),
+                Normalizer.Form.NFD,
+            )
+        val toneByLetter = mutableMapOf<Int, Int>()
+        var letterIndex = 0
+        var latestLetter = -1
+        normalized.forEach { char ->
+            when {
+                isPinyinLetter(char) -> latestLetter = letterIndex++
+                latestLetter >= 0 -> toneValue(char)?.let { tone -> toneByLetter[latestLetter] = tone }
+            }
+        }
+
+        var syllableStart = 0
+        return syllables.joinToString("") { syllable ->
+            val syllableEnd = syllableStart + syllable.length
+            val tone =
+                (syllableStart until syllableEnd)
+                    .firstNotNullOfOrNull(toneByLetter::get)
+                    ?: 0
+            syllableStart = syllableEnd
+            tone.toString()
+        }
+    }
+
+    private fun isPinyinLetter(char: Char): Boolean = char in 'a'..'z' || char == 'ü'
+
+    private fun toneValue(char: Char): Int? =
+        when (char) {
+            '1', '\u0304' -> 1
+            '2', '\u0301' -> 2
+            '3', '\u030C' -> 3
+            '4', '\u0300' -> 4
+            '5', '\u0307' -> 5
+            else -> null
+        }
+}

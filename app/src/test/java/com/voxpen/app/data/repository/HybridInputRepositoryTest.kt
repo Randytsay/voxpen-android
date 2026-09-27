@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.google.common.truth.Truth.assertThat
 import com.voxpen.app.data.local.AppDatabase
+import com.voxpen.app.data.local.HybridContextLearningDao
+import com.voxpen.app.data.local.HybridContextLearningEntity
 import com.voxpen.app.data.local.HybridLexiconDao
 import com.voxpen.app.data.local.HybridLexiconEntity
 import com.voxpen.app.data.local.HybridLexiconSource
@@ -18,21 +20,28 @@ import org.junit.jupiter.api.Test
 class HybridInputRepositoryTest {
     private val database = mockk<AppDatabase>()
     private val dao = mockk<HybridLexiconDao>()
+    private val contextDao = mockk<HybridContextLearningDao>()
     private val context = mockk<Context>()
     private val preferences = mockk<SharedPreferences>()
     private val repository: HybridInputRepository
 
     init {
         every { database.hybridLexiconDao() } returns dao
+        every { database.hybridContextLearningDao() } returns contextDao
         every { context.getSharedPreferences(any(), any()) } returns preferences
         every { preferences.getInt(any(), any()) } returns MixTypeLexiconImporter.VERSION
         coEvery { dao.countSource(HybridLexiconSource.MIXTYPE.name) } returns 200_000
         coEvery { dao.searchPinyinCodes(any(), any()) } returns emptyList()
         coEvery { dao.searchInitialsKeys(any(), any()) } returns emptyList()
+        coEvery { dao.searchPersonalPrefix(any(), any()) } returns emptyList()
+        coEvery { dao.searchSingleSyllableCharacters(any(), any()) } returns emptyList()
         coEvery { dao.getLearningForCodes(any(), any()) } returns emptyList()
         coEvery { dao.recordLearningSelection(any(), any(), any(), any(), any()) } returns Unit
         coEvery { dao.findLearning(any(), any(), any()) } returns null
         coEvery { dao.deleteAutomaticPersonalPhrases() } returns 0
+        coEvery { contextDao.findTransitions(any(), any(), any()) } returns emptyList()
+        coEvery { contextDao.findPersonalPhraseContinuations(any(), any(), any()) } returns emptyList()
+        coEvery { contextDao.clearTransitions() } returns Unit
         repository = HybridInputRepository(database, context)
     }
 
@@ -135,6 +144,56 @@ class HybridInputRepositoryTest {
         }
 
     @Test
+    fun `tone page returns only exact-reading single characters matching selected tone`() =
+        runTest {
+            stubBootstrapInstalled()
+            coEvery { dao.searchSingleSyllableCharacters("yao", 4) } returns
+                listOf(
+                    entity(71, "要", "yao", "y", HybridLexiconSource.MIXTYPE, frequency = 22_000.0, toneCode = "4"),
+                    entity(72, "耀", "yao", "y", HybridLexiconSource.MIXTYPE, frequency = 1_000.0, toneCode = "4"),
+                    entity(73, "遙", "yao", "y", HybridLexiconSource.MIXTYPE, frequency = 5_000.0, toneCode = "2"),
+                    entity(
+                        74,
+                        "要是",
+                        "yao shi",
+                        "ys",
+                        HybridLexiconSource.MIXTYPE,
+                        frequency = 30_000.0,
+                        toneCode = "44",
+                    ),
+                )
+
+            val result = repository.querySingleSyllableCharacters("yao", toneFilter = 4)
+
+            assertThat(result.map { it.phrase }).containsExactly("要", "耀").inOrder()
+            coVerify(exactly = 1) { dao.searchSingleSyllableCharacters("yao", 4) }
+        }
+
+    @Test
+    fun `all tones page lists exact syllable characters but excludes phrase completions`() =
+        runTest {
+            stubBootstrapInstalled()
+            coEvery { dao.searchSingleSyllableCharacters("yao", 0) } returns
+                listOf(
+                    entity(81, "要", "yao", "y", HybridLexiconSource.MIXTYPE, frequency = 22_000.0, toneCode = "4"),
+                    entity(82, "妖", "yao", "y", HybridLexiconSource.MIXTYPE, frequency = 2_000.0, toneCode = "1"),
+                    entity(
+                        83,
+                        "要點",
+                        "yao dian",
+                        "yd",
+                        HybridLexiconSource.MIXTYPE,
+                        frequency = 30_000.0,
+                        toneCode = "43",
+                    ),
+                )
+
+            val result = repository.querySingleSyllableCharacters("yao")
+
+            assertThat(result.map { it.phrase }).containsExactly("要", "妖").inOrder()
+        }
+
+    @Test
     fun `exact boshiamy stays first and exact Pinyin sorts by frequency`() =
         runTest {
             stubBootstrapInstalled()
@@ -199,7 +258,7 @@ class HybridInputRepositoryTest {
         }
 
     @Test
-    fun `one mistyped initial can compose a pinyin phrase`() =
+    fun `pinyin decoding does not concatenate unrelated dictionary chunks into a sentence`() =
         runTest {
             stubBootstrapInstalled()
             coEvery {
@@ -207,16 +266,36 @@ class HybridInputRepositoryTest {
             } returns emptyList()
             coEvery { dao.searchInitialsPrefix("jtqqhh", any()) } returns emptyList()
             coEvery { dao.searchPinyinPrefix("jtqqhh", any()) } returns emptyList()
-            coEvery { dao.searchInitialsExact("jt", any()) } returns
-                listOf(entity(11, "今天", "jin tian", "jt", HybridLexiconSource.PINYIN))
-            coEvery { dao.searchInitialsExact("hh", any()) } returns
-                listOf(entity(13, "很好", "hen hao", "hh", HybridLexiconSource.PINYIN))
-            coEvery { dao.searchInitialsPattern("_q", 2, any()) } returns
-                listOf(entity(12, "天氣", "tian qi", "tq", HybridLexiconSource.PINYIN))
+            coEvery { dao.searchInitialsKeys(any(), any()) } returns
+                listOf(
+                    entity(11, "今天", "jin tian", "jt", HybridLexiconSource.PINYIN),
+                    entity(12, "天氣", "tian qi", "tq", HybridLexiconSource.PINYIN),
+                    entity(13, "很好", "hen hao", "hh", HybridLexiconSource.PINYIN),
+                )
 
             val result = repository.query("jtqqhh")
 
-            assertThat(result.map { it.phrase }).contains("今天天氣很好")
+            assertThat(result).isEmpty()
+        }
+
+    @Test
+    fun `BHAT does not combine individual character readings into an invented phrase`() =
+        runTest {
+            stubBootstrapInstalled()
+            coEvery { dao.searchSourcePrefix(HybridLexiconSource.BOSHIAMY.name, "bhat", any()) } returns emptyList()
+            coEvery { dao.searchInitialsPrefix("bhat", any()) } returns emptyList()
+            coEvery { dao.searchPinyinPrefix("bhat", any()) } returns emptyList()
+            coEvery { dao.searchInitialsKeys(any(), any()) } returns
+                listOf(
+                    entity(21, "不", "bu", "b", HybridLexiconSource.MIXTYPE, frequency = 12_000.0),
+                    entity(22, "會", "hui", "h", HybridLexiconSource.MIXTYPE, frequency = 18_000.0),
+                    entity(23, "啊", "a", "a", HybridLexiconSource.MIXTYPE, frequency = 9_000.0),
+                    entity(24, "他", "ta", "t", HybridLexiconSource.MIXTYPE, frequency = 20_000.0),
+                )
+
+            val result = repository.query("BHAT")
+
+            assertThat(result).isEmpty()
         }
 
     @Test
@@ -294,23 +373,146 @@ class HybridInputRepositoryTest {
         }
 
     @Test
-    fun `continuous full pinyin composes a phrase from dictionary words`() =
+    fun `manual words accept continuous shanling and store the SL initials`() =
+        runTest {
+            val inserted = slot<List<HybridLexiconEntity>>()
+            coEvery { dao.insertAll(capture(inserted)) } returns listOf(43L)
+
+            val added = repository.addPersonalPhrase("姍靈", "shanling")
+
+            assertThat(added).isTrue()
+            assertThat(inserted.captured.single().code).isEqualTo("shan ling")
+            assertThat(inserted.captured.single().normalizedCode).isEqualTo("shanling")
+            assertThat(inserted.captured.single().initials).isEqualTo("sl")
+        }
+
+    @Test
+    fun `personal text import skips header and stores rows as manageable manual words`() =
+        runTest {
+            val inserted = slot<List<HybridLexiconEntity>>()
+            coEvery { dao.insertAll(capture(inserted)) } returns listOf(44L)
+
+            val result = repository.importPersonalText("詞語,拼音\n姍靈,shan ling\n")
+
+            assertThat(result.imported).isEqualTo(1)
+            assertThat(result.skipped).isEqualTo(0)
+            assertThat(inserted.captured.single().phrase).isEqualTo("姍靈")
+            assertThat(inserted.captured.single().code).isEqualTo("shan ling")
+            assertThat(inserted.captured.single().initials).isEqualTo("sl")
+            assertThat(inserted.captured.single().source).isEqualTo(HybridLexiconSource.PERSONAL.name)
+            assertThat(inserted.captured.single().personalKind).isEqualTo("MANUAL")
+        }
+
+    @Test
+    fun `personal dictionary prefix lookup finds full pinyin and initials outside the common pool`() =
+        runTest {
+            stubBootstrapInstalled()
+            val personalPhrase = entity(70, "姍靈", "shan ling", "sl", HybridLexiconSource.PERSONAL)
+            val commonCandidates =
+                (1L..120L).map { index ->
+                    entity(
+                        id = 1_000 + index,
+                        phrase = "一般詞$index",
+                        code = "shan ling",
+                        initials = "sl",
+                        source = HybridLexiconSource.MIXTYPE,
+                    )
+                }
+            coEvery { dao.searchSourcePrefix(any(), any(), any()) } returns emptyList()
+            coEvery { dao.searchInitialsPrefix(any(), any()) } answers {
+                if (firstArg<String>() == "sl") commonCandidates else emptyList()
+            }
+            coEvery { dao.searchPinyinPrefix(any(), any()) } answers {
+                if (firstArg<String>() == "shanling") commonCandidates else emptyList()
+            }
+            coEvery { dao.searchPersonalPrefix(any(), any()) } answers {
+                val prefix = firstArg<String>()
+                listOf(personalPhrase).filter {
+                    it.normalizedCode.startsWith(prefix) || it.initials.startsWith(prefix)
+                }
+            }
+
+            val fullPinyinResult = repository.query("shanling")
+            val initialsResult = repository.query("SL")
+
+            assertThat(fullPinyinResult.first().phrase).isEqualTo("姍靈")
+            assertThat(fullPinyinResult).hasSize(12)
+            assertThat(initialsResult.first().phrase).isEqualTo("姍靈")
+            assertThat(initialsResult).hasSize(12)
+            coVerify(exactly = 1) { dao.searchPersonalPrefix("shanling", any()) }
+            coVerify(exactly = 1) { dao.searchPersonalPrefix("sl", any()) }
+        }
+
+    @Test
+    fun `continuous full pinyin returns a phrase only when that complete phrase exists`() =
         runTest {
             stubBootstrapInstalled()
             val yao = entity(51, "耀", "yao", "y", HybridLexiconSource.PINYIN)
             val wen = entity(52, "文", "wen", "w", HybridLexiconSource.PINYIN)
+            val learnedPhrase = entity(53, "耀文", "yao wen", "yw", HybridLexiconSource.PERSONAL)
             coEvery { dao.searchSourcePrefix(HybridLexiconSource.BOSHIAMY.name, "yaowen", any()) } returns emptyList()
             coEvery { dao.searchInitialsPrefix("yaowen", any()) } returns emptyList()
             coEvery { dao.searchPinyinPrefix("yaowen", any()) } returns emptyList()
             coEvery { dao.searchPinyinCodes(any(), any()) } answers {
                 val keys = firstArg<List<String>>().toSet()
-                listOf(yao, wen).filter { it.normalizedCode in keys }
+                listOf(yao, wen, learnedPhrase).filter { it.normalizedCode in keys }
             }
 
             val result = repository.query("yaowen")
 
-            assertThat(result.map { it.phrase }).contains("耀文")
-            assertThat(result.first { it.phrase == "耀文" }.initials).isEqualTo("yw")
+            assertThat(result.map { it.phrase }).containsExactly("耀文")
+            assertThat(result.first().id).isEqualTo(learnedPhrase.id)
+        }
+
+    @Test
+    fun `mixed initial and full syllable returns a dictionary phrase but never assembles its characters`() =
+        runTest {
+            stubBootstrapInstalled()
+            val yao = entity(61, "耀", "yao", "y", HybridLexiconSource.MIXTYPE)
+            val wen = entity(62, "文", "wen", "w", HybridLexiconSource.MIXTYPE)
+            val learnedPhrase = entity(63, "耀文", "yao wen", "yw", HybridLexiconSource.PERSONAL)
+            val ambiguousInitialsPhrase =
+                entity(64, "四字冷僻詞", "yi wang er nian", "ywen", HybridLexiconSource.MIXTYPE, frequency = 1.0)
+            coEvery { dao.searchSourcePrefix(HybridLexiconSource.BOSHIAMY.name, "ywen", any()) } returns emptyList()
+            coEvery { dao.searchInitialsPrefix("ywen", any()) } returns listOf(ambiguousInitialsPhrase)
+            coEvery { dao.searchPinyinPrefix("ywen", any()) } returns emptyList()
+            coEvery { dao.searchInitialsKeys(any(), any()) } answers {
+                val keys = firstArg<List<String>>().toSet()
+                listOf(yao, wen, learnedPhrase).filter { it.initials in keys }
+            }
+
+            val result = repository.query("ywen")
+
+            assertThat(result.first().phrase).isEqualTo("耀文")
+            assertThat(result.map { it.phrase }).contains("四字冷僻詞")
+            assertThat(result.first().id).isEqualTo(learnedPhrase.id)
+        }
+
+    @Test
+    fun `duos and dsao both find 多少`() =
+        runTest {
+            stubBootstrapInstalled()
+            val duoshao =
+                entity(
+                    54,
+                    "多少",
+                    "duo shao",
+                    "ds",
+                    HybridLexiconSource.MIXTYPE,
+                    frequency = 22_000.0,
+                )
+            coEvery {
+                dao.searchSourcePrefix(HybridLexiconSource.BOSHIAMY.name, any(), any())
+            } returns emptyList()
+            coEvery { dao.searchInitialsPrefix(any(), any()) } returns emptyList()
+            coEvery { dao.searchPinyinPrefix(any(), any()) } returns emptyList()
+            coEvery { dao.searchInitialsKeys(any(), any()) } answers {
+                val keys = firstArg<List<String>>().toSet()
+                listOf(duoshao).filter { it.initials in keys }
+            }
+
+            assertThat(repository.query("duos").map { it.phrase }).contains("多少")
+            assertThat(repository.query("dsao").map { it.phrase }).contains("多少")
         }
 
     @Test
@@ -347,7 +549,7 @@ class HybridInputRepositoryTest {
                         normalizedCode = "shi",
                         reading = "shi",
                         kind = "SELECTION",
-                        selectionCount = 3,
+                        selectionCount = 2,
                         lastSelectedAt = 30,
                     ),
                 )
@@ -405,6 +607,46 @@ class HybridInputRepositoryTest {
             }
         }
 
+    @Test
+    fun `personal phrase pinyin is suggested from installed character readings`() =
+        runTest {
+            coEvery { dao.findPinyinForPhrase("姍") } returns
+                entity(1, "姍", "shan", "s", HybridLexiconSource.MIXTYPE)
+            coEvery { dao.findPinyinForPhrase("靈") } returns
+                entity(2, "靈", "ling", "l", HybridLexiconSource.MIXTYPE)
+
+            assertThat(repository.suggestPinyin("姍靈")).isEqualTo("shan ling")
+        }
+
+    @Test
+    fun `personal phrase pinyin remains empty when a character has no reading`() =
+        runTest {
+            coEvery { dao.findPinyinForPhrase("姍") } returns null
+
+            assertThat(repository.suggestPinyin("姍靈")).isNull()
+        }
+
+    @Test
+    fun `context suggestions continue a four character personal phrase`() =
+        runTest {
+            coEvery { contextDao.findTransitions(listOf("台"), 2, any()) } returns
+                listOf(HybridContextLearningEntity("台", "達", 4, 100L))
+            coEvery { contextDao.findPersonalPhraseContinuations("台", any(), any()) } returns
+                listOf(
+                    entity(3, "台達能源", "tai da neng yuan", "tdny", HybridLexiconSource.PERSONAL)
+                        .copy(personalKind = "AUTO_PROMOTED"),
+                )
+            coEvery { contextDao.findPersonalPhraseContinuations("台達", any(), any()) } returns
+                listOf(
+                    entity(3, "台達能源", "tai da neng yuan", "tdny", HybridLexiconSource.PERSONAL)
+                        .copy(personalKind = "AUTO_PROMOTED"),
+                )
+
+            assertThat(repository.queryContextSuggestions("台")).containsAtLeast("達", "達能源")
+            assertThat(repository.queryContextSuggestions("台").first()).isEqualTo("達")
+            assertThat(repository.queryContextSuggestions("台達")).containsAtLeast("能", "能源")
+        }
+
     private fun stubBootstrapInstalled() {
         coEvery { dao.insertAll(any()) } returns emptyList()
         coEvery { dao.searchInitialsExact(any(), any()) } returns emptyList()
@@ -419,6 +661,7 @@ class HybridInputRepositoryTest {
         source: HybridLexiconSource,
         usage: Int = 0,
         frequency: Double? = null,
+        toneCode: String = "",
     ): HybridLexiconEntity =
         HybridLexiconEntity(
             id = id,
@@ -429,6 +672,7 @@ class HybridInputRepositoryTest {
             source = source.name,
             usageCount = usage,
             frequencyWeight = frequency,
+            toneCode = toneCode,
         )
 
     private fun HybridLexiconEntity.toCandidate() =
@@ -442,5 +686,6 @@ class HybridInputRepositoryTest {
             usageCount = usageCount,
             lastUsedAt = lastUsedAt,
             baseWeight = baseWeight,
+            toneCode = toneCode,
         )
 }

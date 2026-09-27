@@ -12,9 +12,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CorrectionMemoryEntity::class,
         HybridLexiconEntity::class,
         HybridLearningEntity::class,
+        HybridContextLearningEntity::class,
         ClipboardEntry::class,
     ],
-    version = 9,
+    version = 14,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -25,6 +26,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun correctionMemoryDao(): CorrectionMemoryDao
 
     abstract fun hybridLexiconDao(): HybridLexiconDao
+
+    abstract fun hybridContextLearningDao(): HybridContextLearningDao
 
     abstract fun clipboardDao(): ClipboardDao
 
@@ -188,6 +191,66 @@ abstract class AppDatabase : RoomDatabase() {
             object : Migration(8, 9) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE hybrid_lexicon ADD COLUMN frequencyWeight REAL DEFAULT NULL")
+                }
+            }
+
+        val MIGRATION_9_10 =
+            object : Migration(9, 10) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE hybrid_lexicon ADD COLUMN toneCode TEXT NOT NULL DEFAULT ''")
+                    db.execSQL(
+                        "DROP INDEX IF EXISTS index_hybrid_lexicon_phrase_normalizedCode_source",
+                    )
+                    db.execSQL(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS index_hybrid_lexicon_phrase_normalizedCode_source_toneCode
+                        ON hybrid_lexicon (phrase, normalizedCode, source, toneCode)
+                        """.trimIndent(),
+                    )
+                }
+            }
+
+        val MIGRATION_10_11 =
+            object : Migration(10, 11) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS hybrid_context_learning (
+                            contextText TEXT NOT NULL,
+                            continuation TEXT NOT NULL,
+                            selectionCount INTEGER NOT NULL,
+                            lastSelectedAt INTEGER NOT NULL,
+                            PRIMARY KEY (contextText, continuation)
+                        )
+                        """.trimIndent(),
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_hybrid_context_learning_contextText_selectionCount_lastSelectedAt " +
+                            "ON hybrid_context_learning (contextText, selectionCount, lastSelectedAt)",
+                    )
+                }
+            }
+
+        val MIGRATION_11_12 =
+            object : Migration(11, 12) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE clipboard_entries ADD COLUMN shortcut TEXT NOT NULL DEFAULT ''")
+                }
+            }
+
+        val MIGRATION_12_13 =
+            object : Migration(12, 13) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE clipboard_entries ADD COLUMN label TEXT NOT NULL DEFAULT ''")
+                }
+            }
+
+        val MIGRATION_13_14 =
+            object : Migration(13, 14) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE clipboard_entries ADD COLUMN isFavorite INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE clipboard_entries ADD COLUMN lastUsedAt INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("UPDATE clipboard_entries SET lastUsedAt = updatedAt WHERE type = 'COMMON'")
                 }
             }
     }

@@ -158,21 +158,27 @@
         android:layout_marginTop="2dp"
         android:layout_marginBottom="2dp">
 
-        <!-- Compact VoxPen toolbar matching the approved keyboard mockup. -->
-        <LinearLayout
-            android:id="@+id/voxpen_toolbar"
+        <!-- Scrollable, evenly sized VoxPen toolbar. -->
+        <HorizontalScrollView
+            android:id="@+id/voxpen_toolbar_scroll"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_gravity="center_vertical"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:paddingStart="2dp"
-            android:paddingEnd="2dp">
+            android:fillViewport="true"
+            android:scrollbars="none"
+            android:overScrollMode="never">
+
+          <LinearLayout
+              android:id="@+id/voxpen_toolbar"
+              android:layout_width="wrap_content"
+              android:layout_height="match_parent"
+              android:orientation="horizontal"
+              android:gravity="center">
 
             <ImageButton
                 android:id="@+id/btn_mic"
-                android:layout_width="48dp"
-                android:layout_height="38dp"
+                android:layout_width="54dp"
+                android:layout_height="44dp"
                 android:layout_weight="0"
                 android:background="@color/key_background"
                 android:contentDescription="@string/keyboard_record"
@@ -183,9 +189,9 @@
 
             <TextView
                 android:id="@+id/btn_tone"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
+                android:layout_width="54dp"
+                android:layout_height="44dp"
+                android:layout_weight="0"
                 android:background="@color/key_background"
                 android:gravity="center"
                 android:textSize="20sp"
@@ -193,50 +199,79 @@
                 android:textColor="@color/key_text"
                 android:layout_margin="2dp" />
 
-            <TextView
+            <ImageButton
                 android:id="@+id/btn_edit_shortcut"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
+                android:layout_width="54dp"
+                android:layout_height="44dp"
+                android:layout_weight="0"
                 android:background="@color/key_background"
-                android:gravity="center"
-                android:text="編輯"
-                android:textColor="@color/key_text"
-                android:textSize="14sp"
+                android:contentDescription="@string/keyboard_edit"
+                android:src="@drawable/ic_edit"
+                android:padding="10dp"
+                android:scaleType="centerInside"
                 android:layout_margin="2dp" />
 
-            <TextView
-                android:id="@+id/btn_dictionary_shortcut"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
+            <ImageButton
+                android:id="@+id/btn_emoji"
+                android:layout_width="54dp"
+                android:layout_height="44dp"
+                android:layout_weight="0"
                 android:background="@color/key_background"
-                android:gravity="center"
-                android:text="詞庫"
-                android:textColor="@color/key_text"
-                android:textSize="14sp"
+                android:contentDescription="@string/keyboard_emoji"
+                android:src="@drawable/ic_emoji"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:layout_margin="2dp" />
+
+            <ImageButton
+                android:id="@+id/btn_phrases"
+                android:layout_width="54dp"
+                android:layout_height="44dp"
+                android:layout_weight="0"
+                android:background="@color/key_background"
+                android:contentDescription="片語"
+                android:src="@drawable/ic_phrase"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:layout_margin="2dp" />
+
+            <ImageButton
+                android:id="@+id/btn_dictionary_shortcut"
+                android:layout_width="54dp"
+                android:layout_height="44dp"
+                android:layout_weight="0"
+                android:background="@color/key_background"
+                android:contentDescription="@string/keyboard_dictionary"
+                android:src="@drawable/ic_dictionary"
+                android:padding="10dp"
+                android:scaleType="centerInside"
                 android:layout_margin="2dp" />
 
             <ImageButton
                 android:id="@+id/btn_switch"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
+                android:layout_width="54dp"
+                android:layout_height="44dp"
+                android:layout_weight="0"
                 android:background="@color/key_background"
-                android:contentDescription="@string/keyboard_switch"
+                android:contentDescription="@string/keyboard_main"
                 android:src="@drawable/ic_language"
+                android:padding="10dp"
+                android:scaleType="centerInside"
                 android:layout_margin="2dp" />
 
             <ImageButton
                 android:id="@+id/btn_settings"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
+                android:layout_width="54dp"
+                android:layout_height="44dp"
+                android:layout_weight="0"
                 android:background="@color/key_background"
                 android:contentDescription="@string/keyboard_settings"
                 android:src="@drawable/ic_settings"
+                android:padding="10dp"
+                android:scaleType="centerInside"
                 android:layout_margin="2dp" />
-        </LinearLayout>
+          </LinearLayout>
+        </HorizontalScrollView>
 
         <!-- The code floats above candidates; neither row overlays the editor's composing text. -->
         <TextView

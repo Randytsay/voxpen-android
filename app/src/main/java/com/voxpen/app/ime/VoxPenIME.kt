@@ -268,7 +268,7 @@ class VoxPenIME : InputMethodService() {
     private fun bindButtons(view: View) {
         view.findViewById<ImageButton>(R.id.btn_switch)?.let { switchBtn ->
             switchBtn.setOnClickListener {
-                actionHandler.handle(KeyboardAction.SwitchKeyboard)
+                hybridKeyboardPanel?.showMainScreen()
             }
             switchBtn.setOnLongClickListener {
                 val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
@@ -283,11 +283,17 @@ class VoxPenIME : InputMethodService() {
                 true
             }
         }
-        view.findViewById<TextView>(R.id.btn_edit_shortcut)?.setOnClickListener {
+        view.findViewById<ImageButton>(R.id.btn_edit_shortcut)?.setOnClickListener {
             hybridKeyboardPanel?.toggleEditScreen()
         }
-        view.findViewById<TextView>(R.id.btn_dictionary_shortcut)?.setOnClickListener {
+        view.findViewById<ImageButton>(R.id.btn_dictionary_shortcut)?.setOnClickListener {
             hybridKeyboardPanel?.showDictionaryScreen()
+        }
+        view.findViewById<ImageButton>(R.id.btn_emoji)?.setOnClickListener {
+            hybridKeyboardPanel?.toggleEmojiScreen()
+        }
+        view.findViewById<ImageButton>(R.id.btn_phrases)?.setOnClickListener {
+            hybridKeyboardPanel?.togglePhraseScreen()
         }
         setupMicButton(view.findViewById(R.id.btn_mic))
         view.findViewById<TextView>(R.id.btn_tone)?.setOnClickListener {
@@ -994,8 +1000,7 @@ class VoxPenIME : InputMethodService() {
             VoiceCommand.Paste -> currentInputConnection?.performContextMenuAction(android.R.id.paste)
             VoiceCommand.Cut -> currentInputConnection?.performContextMenuAction(android.R.id.cut)
             VoiceCommand.ClearAll -> {
-                currentInputConnection?.performContextMenuAction(android.R.id.selectAll)
-                currentInputConnection?.commitText("", 1)
+                currentInputConnection?.let(EditorTextClearer::clear)
             }
         }
     }
@@ -1176,7 +1181,7 @@ class VoxPenIME : InputMethodService() {
 
         val tooltips =
             mapOf(
-                R.id.btn_switch to getString(R.string.keyboard_switch),
+                R.id.btn_switch to getString(R.string.keyboard_main),
                 R.id.btn_mic to getString(R.string.keyboard_record),
                 R.id.btn_settings to getString(R.string.keyboard_settings),
                 R.id.btn_tone to getString(R.string.keyboard_tone),

@@ -5,7 +5,7 @@ import com.voxpen.app.data.local.HybridLexiconSource
 /** Parser for the unchanged Traditional-Chinese source files shipped by VanguardLexicon. */
 object MixTypeLexiconImporter {
     // VanguardLexicon 4.8.4 data revision; bump when the bundled corpus changes.
-    const val VERSION = 4_080_004
+    const val VERSION = 4_080_005
     const val ASSET_NAME = "mixtype-vanguard-cht-4.8.4.zip"
 
     fun isSupportedFile(filename: String): Boolean =
@@ -30,11 +30,20 @@ object MixTypeLexiconImporter {
     }
 
     fun zhuyinToPinyin(reading: String): String? {
+        return parseZhuyinReading(reading)?.first
+    }
+
+    fun zhuyinToneCode(reading: String): String? {
+        return parseZhuyinReading(reading)?.second
+    }
+
+    private fun parseZhuyinReading(reading: String): Pair<String, String>? {
         val syllables = reading.trim().split(Regex("[\\s-]+")).filter(String::isNotBlank)
         if (syllables.isEmpty()) return null
-        val pinyin = syllables.map { zhuyinSyllableToPinyin(it) ?: return null }
-        val result = pinyin.joinToString(" ")
-        return result.takeIf(PinyinInputSegmentor::isValidReading)
+        val parsed = syllables.map { zhuyinSyllableToPinyin(it) ?: return null }
+        val pinyin = parsed.joinToString(" ") { it.first }
+        if (!PinyinInputSegmentor.isValidReading(pinyin)) return null
+        return pinyin to parsed.joinToString("") { it.second.toString() }
     }
 
     private fun parsePhrase(line: String): HybridLexiconImporter.ParsedEntry? {
@@ -42,23 +51,27 @@ object MixTypeLexiconImporter {
         if (columns.size < 3) return null
         val phrase = columns[0]
         val frequency = columns[1].toDoubleOrNull()?.takeIf { it.isFinite() } ?: return null
-        val code = zhuyinToPinyin(columns.drop(2).joinToString(" ")) ?: return null
-        return entry(phrase, code, frequency)
+        val reading = columns.drop(2).joinToString(" ")
+        val parsedReading = parseZhuyinReading(reading) ?: return null
+        return entry(phrase, parsedReading.first, frequency).copy(toneCode = parsedReading.second)
     }
 
     private fun parseCoreCharacter(line: String): HybridLexiconImporter.ParsedEntry? {
         val columns = line.split('\t')
         if (columns.size < 4 || columns[0].codePointCount(0, columns[0].length) != 1) return null
         val frequency = columns[2].toDoubleOrNull()?.takeIf { it.isFinite() } ?: return null
-        val code = zhuyinToPinyin(columns.drop(3).joinToString(" ")) ?: return null
-        return entry(columns[0], code, frequency)
+        val reading = columns.drop(3).joinToString(" ")
+        val parsedReading = parseZhuyinReading(reading) ?: return null
+        return entry(columns[0], parsedReading.first, frequency).copy(toneCode = parsedReading.second)
     }
 
     private fun parseSupplementaryCharacter(line: String): HybridLexiconImporter.ParsedEntry? {
         val columns = line.split(Regex("\\s+"))
         if (columns.size < 2 || columns[0].codePointCount(0, columns[0].length) != 1) return null
-        val code = zhuyinToPinyin(columns.drop(1).joinToString(" ")) ?: return null
-        return entry(columns[0], code, frequency = 0.0)
+        val reading = columns.drop(1).joinToString(" ")
+        val parsedReading = parseZhuyinReading(reading) ?: return null
+        return entry(columns[0], parsedReading.first, frequency = 0.0)
+            .copy(toneCode = parsedReading.second)
     }
 
     private fun entry(
@@ -72,9 +85,10 @@ object MixTypeLexiconImporter {
         frequencyWeight = frequency.coerceAtLeast(0.0),
     )
 
-    private fun zhuyinSyllableToPinyin(raw: String): String? {
+    private fun zhuyinSyllableToPinyin(raw: String): Pair<String, Int>? {
         val syllable = raw.filterNot { it in TONES }
         if (syllable.isEmpty()) return null
+        val tone = TONES.firstOrNull { it in raw }?.let(TONE_NUMBER::get) ?: 1
 
         val initial = INITIALS.entries.firstOrNull { syllable.startsWith(it.key) }
         val onset = initial?.value.orEmpty()
@@ -82,7 +96,7 @@ object MixTypeLexiconImporter {
         if (phoneticBody.any { it !in FINALS }) return null
         var body = phoneticBody.mapNotNull(FINALS::get).joinToString("")
         if (body.isEmpty()) {
-            if (onset in APICAL_INITIALS && initial != null) return "${onset}i"
+            if (onset in APICAL_INITIALS && initial != null) return "${onset}i" to tone
             return null
         }
 
@@ -92,7 +106,7 @@ object MixTypeLexiconImporter {
                 "ieng" -> "ing"
                 else -> body
             }
-            return zeroInitial(body)
+            return zeroInitial(body) to tone
         }
 
         body = when {
@@ -116,7 +130,8 @@ object MixTypeLexiconImporter {
             "uen" -> "un"
             else -> body
         }
-        return (onset + body).takeIf(PinyinInputSegmentor::isValidReading)
+        val pinyin = onset + body
+        return pinyin.takeIf(PinyinInputSegmentor::isValidReading)?.let { it to tone }
     }
 
     private fun zeroInitial(body: String): String = when (body) {
@@ -150,6 +165,7 @@ object MixTypeLexiconImporter {
     }
 
     private val TONES = setOf('ˊ', 'ˇ', 'ˋ', '˙')
+    private val TONE_NUMBER = mapOf('ˊ' to 2, 'ˇ' to 3, 'ˋ' to 4, '˙' to 5)
     private val APICAL_INITIALS = setOf("zh", "ch", "sh", "r", "z", "c", "s")
     private val PALATAL_INITIALS = setOf("j", "q", "x")
     private val FRONT_ROUNDED_INITIALS = setOf("n", "l")

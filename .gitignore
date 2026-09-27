@@ -48,6 +48,9 @@ keystore.properties
 # Secrets
 *.env
 
+# Personal import data
+Randy_個人常用詞庫_*.csv
+
 # Reference repos (not part of our source)
 reference/
 
