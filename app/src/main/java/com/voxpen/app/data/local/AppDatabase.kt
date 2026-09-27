@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ClipboardEntry::class,
     ],
     version = 14,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun transcriptionDao(): TranscriptionDao
