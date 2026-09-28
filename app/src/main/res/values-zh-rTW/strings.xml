@@ -274,6 +274,10 @@
     <string name="provider_custom">自訂（LiteLLM / Ollama）</string>
     <string name="provider_key_configured">API 金鑰已設定 ✓</string>
     <string name="provider_api_key_hint">%1$s API 金鑰</string>
+    <string name="provider_api_key_optional_hint">%1$s API 金鑰（選填）</string>
+    <string name="custom_provider_key_optional_hint">Custom／自架服務可以不填 API 金鑰；只有你的端點需要驗證時才填。</string>
+    <string name="provider_model_override">模型名稱覆寫</string>
+    <string name="model_override_hint">切換供應商時會保留模型名稱；可選上方預設模型，或直接輸入精確的 model ID。</string>
     <string name="provider_vertex_gateway_url">Vertex Gateway 網址</string>
     <string name="provider_vertex_gateway_url_hint">輸入結尾為 /v1 的私人 gateway 網址（App 不會儲存 Google 憑證）。</string>
     <string name="provider_vertex_gateway_token">Gateway Token</string>

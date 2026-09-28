@@ -228,6 +228,24 @@ class RecordingControllerTest {
         } returns "test-key"
 
         every {
+            apiKeyManager.getEffectiveSttApiKey(
+                any(),
+            )
+        } returns "test-key"
+
+        every {
+            apiKeyManager.isKeyRequiredForStt(
+                any(),
+            )
+        } returns true
+
+        every {
+            apiKeyManager.getEffectiveLlmApiKey(
+                any(),
+            )
+        } returns "test-key"
+
+        every {
             preferencesManager.refinementEnabledFlow
         } returns refinementEnabledFlow
 
@@ -480,7 +498,19 @@ class RecordingControllerTest {
             } returns "stt-openai-key"
 
             every {
+                apiKeyManager.getEffectiveSttApiKey(
+                    SttProvider.OpenAI,
+                )
+            } returns "stt-openai-key"
+
+            every {
                 apiKeyManager.getApiKey(
+                    LlmProvider.Groq,
+                )
+            } returns "llm-groq-key"
+
+            every {
+                apiKeyManager.getEffectiveLlmApiKey(
                     LlmProvider.Groq,
                 )
             } returns "llm-groq-key"
@@ -759,6 +789,12 @@ class RecordingControllerTest {
                 apiKeyManager.getGroqApiKey()
             } returns null
 
+            every {
+                apiKeyManager.getEffectiveSttApiKey(
+                    any(),
+                )
+            } returns ""
+
             controller.uiState.test {
                 assertThat(
                     awaitItem(),
@@ -806,6 +842,12 @@ class RecordingControllerTest {
                     SttProvider.OpenAI,
                 )
             } returns null
+
+            every {
+                apiKeyManager.getEffectiveSttApiKey(
+                    SttProvider.OpenAI,
+                )
+            } returns ""
 
             every {
                 apiKeyManager.getGroqApiKey()

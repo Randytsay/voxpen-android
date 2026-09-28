@@ -239,11 +239,12 @@ class SettingsViewModelTest {
         }
 
     @Test
-    fun `setLlmProvider should set default model for provider with presets`() =
+    fun `setLlmProvider should preserve model override for provider with presets`() =
         runTest {
             val vm = createViewModel()
             vm.setLlmProvider(LlmProvider.Groq)
-            coVerify { preferencesManager.setLlmModel(LlmProvider.Groq.defaultModelId) }
+            coVerify { preferencesManager.setLlmProvider(LlmProvider.Groq) }
+            coVerify(exactly = 0) { preferencesManager.setLlmModel(any()) }
         }
 
     @Test
@@ -266,6 +267,7 @@ class SettingsViewModelTest {
             every { preferencesManager.llmModelFlow } returns flowOf("google/gemini-3.7-flash")
             every { apiKeyManager.getVertexGatewayUrl() } returns "http://vertex-gateway.test/v1"
             every { apiKeyManager.getApiKey(LlmProvider.Vertex) } returns "gateway-token"
+            every { apiKeyManager.getEffectiveLlmApiKey(LlmProvider.Vertex) } returns "gateway-token"
             every { apiFactory.createForCustom("http://vertex-gateway.test/v1") } returns chatCompletionApi
             coEvery { chatCompletionApi.chatCompletion(any(), any()) } returns
                 ChatCompletionResponse(choices = listOf(ChatChoice(message = ChatMessage("assistant", "ok"))))
@@ -285,6 +287,7 @@ class SettingsViewModelTest {
             every { preferencesManager.customLlmModelFlow } returns flowOf("qwen36-fast")
             every { apiKeyManager.getCustomBaseUrl() } returns "http://100.102.183.27:4000"
             every { apiKeyManager.getApiKey(LlmProvider.Custom) } returns "sk-test"
+            every { apiKeyManager.getEffectiveLlmApiKey(LlmProvider.Custom) } returns "sk-test"
             every { apiFactory.createForCustom("http://100.102.183.27:4000") } returns chatCompletionApi
             coEvery { chatCompletionApi.chatCompletion(any(), any()) } returns
                 ChatCompletionResponse(choices = listOf(ChatChoice(message = ChatMessage("assistant", "ok"))))
@@ -306,6 +309,7 @@ class SettingsViewModelTest {
             every { preferencesManager.customLlmModelFlow } returns flowOf("qwen36-fast")
             every { apiKeyManager.getCustomBaseUrl() } returns "http://100.102.183.27:4000"
             every { apiKeyManager.getApiKey(LlmProvider.Custom) } returns "sk-test"
+            every { apiKeyManager.getEffectiveLlmApiKey(LlmProvider.Custom) } returns "sk-test"
             every { apiFactory.createForCustom(any()) } returns chatCompletionApi
             coEvery { chatCompletionApi.chatCompletion(any(), any()) } throws IOException("connection refused")
             val vm = createViewModel()

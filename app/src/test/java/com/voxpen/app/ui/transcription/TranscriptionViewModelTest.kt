@@ -61,6 +61,8 @@ class TranscriptionViewModelTest {
         every { preferencesManager.sttModelFlow } returns MutableStateFlow(PreferencesManager.DEFAULT_STT_MODEL)
         every { preferencesManager.customSttBaseUrlFlow } returns MutableStateFlow("")
         every { apiKeyManager.getSttApiKey(any()) } returns "stt-key"
+        every { apiKeyManager.getEffectiveSttApiKey(any()) } returns "stt-key"
+        every { apiKeyManager.isKeyRequiredForStt(any()) } returns true
         every { apiKeyManager.getGroqApiKey() } returns "stt-key"
     }
 

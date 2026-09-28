@@ -323,13 +323,13 @@ class RecordingController(
         }
 
         val apiKey =
-            apiKeyManager.getSttApiKey(
+            apiKeyManager.getEffectiveSttApiKey(
                 currentSttProvider,
             )
 
         if (
-            apiKey.isNullOrBlank() &&
-            currentSttProvider != SttProvider.Custom
+            apiKey.isBlank() &&
+            apiKeyManager.isKeyRequiredForStt(currentSttProvider)
         ) {
             streamingSession?.cancel()
             _uiState.value =
@@ -545,11 +545,9 @@ class RecordingController(
                         }
 
                     val llmApiKey =
-                        apiKeyManager
-                            .getApiKey(
-                                llmProvider,
-                            )
-                            .orEmpty()
+                        apiKeyManager.getEffectiveLlmApiKey(
+                            llmProvider,
+                        )
 
                     val refinedResult =
                         refineTextUseCase(

@@ -106,8 +106,7 @@ class LlmRepositoryTest {
                 customBaseUrl = server.url("/").toString(),
             )
             assertThat(result.isSuccess).isTrue()
-            // OkHttp trims trailing whitespace: "Bearer " arrives as "Bearer".
-            assertThat(server.takeRequest().getHeader("Authorization")).isEqualTo("Bearer")
+            assertThat(server.takeRequest().getHeader("Authorization")).isNull()
         }
 
     @Test

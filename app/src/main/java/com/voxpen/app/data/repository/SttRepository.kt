@@ -117,7 +117,7 @@ class SttRepository
 
                 val response =
                     api.transcribe(
-                        authorization = "Bearer $apiKey",
+                        authorization = apiKey.takeIf { it.isNotBlank() }?.let { "Bearer $it" },
                         file = filePart,
                         model = modelBody,
                         responseFormat = format,

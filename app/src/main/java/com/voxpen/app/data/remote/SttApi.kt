@@ -11,7 +11,7 @@ interface SttApi {
     @Multipart
     @POST("v1/audio/transcriptions")
     suspend fun transcribe(
-        @Header("Authorization") authorization: String,
+        @Header("Authorization") authorization: String?,
         @Part file: MultipartBody.Part,
         @Part("model") model: RequestBody,
         @Part("response_format") responseFormat: RequestBody,

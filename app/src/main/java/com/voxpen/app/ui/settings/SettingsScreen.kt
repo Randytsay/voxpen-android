@@ -721,7 +721,21 @@ private fun SttProviderApiKeyField(
     OutlinedTextField(
         value = keyInput,
         onValueChange = { keyInput = it },
-        label = { Text(stringResource(R.string.provider_api_key_hint, sttProviderDisplayName(state.sttProvider))) },
+        label = {
+            Text(
+                if (state.sttProvider == SttProvider.Custom) {
+                    stringResource(R.string.provider_api_key_optional_hint, sttProviderDisplayName(state.sttProvider))
+                } else {
+                    stringResource(R.string.provider_api_key_hint, sttProviderDisplayName(state.sttProvider))
+                },
+            )
+        },
+        supportingText =
+            if (state.sttProvider == SttProvider.Custom) {
+                { Text(stringResource(R.string.custom_provider_key_optional_hint)) }
+            } else {
+                null
+            },
         visualTransformation = PasswordVisualTransformation(),
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
@@ -778,6 +792,7 @@ private fun LlmProviderSection(
         CustomProviderFields(state, viewModel)
     } else {
         ProviderModelList(state, viewModel)
+        ProviderModelOverrideField(state, viewModel)
     }
 }
 
@@ -824,6 +839,7 @@ private fun VertexProviderFields(
     ) { Text(stringResource(R.string.settings_save)) }
     Spacer(Modifier.height(8.dp))
     ProviderModelList(state, viewModel)
+    ProviderModelOverrideField(state, viewModel)
     Spacer(Modifier.height(8.dp))
     OutlinedButton(
         onClick = { viewModel.testLlmProvider() },
@@ -857,7 +873,21 @@ private fun ProviderApiKeyField(
     OutlinedTextField(
         value = keyInput,
         onValueChange = { keyInput = it },
-        label = { Text(stringResource(R.string.provider_api_key_hint, providerDisplayName(state.llmProvider))) },
+        label = {
+            Text(
+                if (state.llmProvider == LlmProvider.Custom) {
+                    stringResource(R.string.provider_api_key_optional_hint, providerDisplayName(state.llmProvider))
+                } else {
+                    stringResource(R.string.provider_api_key_hint, providerDisplayName(state.llmProvider))
+                },
+            )
+        },
+        supportingText =
+            if (state.llmProvider == LlmProvider.Custom) {
+                { Text(stringResource(R.string.custom_provider_key_optional_hint)) }
+            } else {
+                null
+            },
         visualTransformation = PasswordVisualTransformation(),
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
@@ -897,6 +927,22 @@ private fun ProviderModelList(
             viewModel.setLlmModel(model.id)
         }
     }
+}
+
+@Composable
+private fun ProviderModelOverrideField(
+    state: SettingsUiState,
+    viewModel: SettingsViewModel,
+) {
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = state.llmModel,
+        onValueChange = { viewModel.setLlmModel(it) },
+        label = { Text(stringResource(R.string.provider_model_override)) },
+        supportingText = { Text(stringResource(R.string.model_override_hint)) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable

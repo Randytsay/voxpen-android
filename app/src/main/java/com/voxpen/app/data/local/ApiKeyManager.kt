@@ -77,6 +77,28 @@ class ApiKeyManager
         fun isSttKeyConfigured(provider: SttProvider): Boolean =
             !getSttApiKey(provider).isNullOrBlank()
 
+        /** Custom/self-hosted STT endpoints may intentionally be keyless. */
+        fun isKeyRequiredForStt(provider: SttProvider): Boolean =
+            provider != SttProvider.Custom
+
+        /** Custom/self-hosted LLM endpoints may intentionally be keyless. */
+        fun isKeyRequiredForLlm(provider: LlmProvider): Boolean =
+            provider != LlmProvider.Custom
+
+        /**
+         * Returns a non-null key value for request plumbing. Callers that gate
+         * requests must still consult [isKeyRequiredForStt].
+         */
+        fun getEffectiveSttApiKey(provider: SttProvider): String =
+            getSttApiKey(provider)?.takeIf { it.isNotBlank() }.orEmpty()
+
+        /**
+         * Returns a non-null key value for request plumbing. Callers that gate
+         * requests must still consult [isKeyRequiredForLlm].
+         */
+        fun getEffectiveLlmApiKey(provider: LlmProvider): String =
+            getApiKey(provider)?.takeIf { it.isNotBlank() }.orEmpty()
+
         private fun keyFor(provider: LlmProvider): String =
             "${KEY_PREFIX}${provider.key}"
 

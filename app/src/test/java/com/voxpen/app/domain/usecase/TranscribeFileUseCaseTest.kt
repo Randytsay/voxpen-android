@@ -220,6 +220,36 @@ class TranscribeFileUseCaseTest {
         }
 
     @Test
+    fun `should refine with keyless custom LLM when base URL is configured`() =
+        runTest {
+            val pcmData = ByteArray(100) { (it % 256).toByte() }
+            val wavBytes = AudioEncoder.pcmToWav(pcmData, 16000, 1, 16)
+
+            coEvery { sttApi.transcribe(any(), any(), any(), any(), any(), any()) } returns
+                WhisperResponse(text = "raw text")
+            every { apiFactory.createForCustom("http://localhost:11434/v1/") } returns chatCompletionApi
+            coEvery { chatCompletionApi.chatCompletion(null, any()) } returns
+                chatResponse("polished locally")
+            val entitySlot = slot<TranscriptionEntity>()
+            coEvery { transcriptionRepository.insert(capture(entitySlot)) } returns 1L
+
+            val result =
+                useCase(
+                    fileBytes = wavBytes,
+                    fileName = "test.wav",
+                    language = SttLanguage.English,
+                    apiKey = "key",
+                    refinementApiKey = "",
+                    llmModel = "qwen2.5:7b",
+                    llmProvider = LlmProvider.Custom,
+                    customLlmBaseUrl = "http://localhost:11434/v1/",
+                )
+
+            assertThat(result.isSuccess).isTrue()
+            assertThat(entitySlot.captured.refinedText).isEqualTo("polished locally")
+        }
+
+    @Test
     fun `should skip refinement when refinementApiKey is null`() =
         runTest {
             val pcmData = ByteArray(100) { (it % 256).toByte() }

@@ -274,6 +274,10 @@
     <string name="provider_custom">Custom / LiteLLM / Ollama</string>
     <string name="provider_key_configured">API key configured ✓</string>
     <string name="provider_api_key_hint">%1$s API Key</string>
+    <string name="provider_api_key_optional_hint">%1$s API Key (optional)</string>
+    <string name="custom_provider_key_optional_hint">Custom/self-hosted providers may be used without an API key. Enter one only if your endpoint requires it.</string>
+    <string name="provider_model_override">Model override</string>
+    <string name="model_override_hint">Keeps your model name when switching providers; choose a preset above or type an exact model ID here.</string>
     <string name="provider_vertex_gateway_url">Vertex Gateway URL</string>
     <string name="provider_vertex_gateway_url_hint">Your private gateway URL ending in /v1 (the app never stores Google credentials).</string>
     <string name="provider_vertex_gateway_token">Gateway Token</string>

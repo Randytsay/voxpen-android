@@ -159,6 +159,30 @@ class ApiKeyManagerTest {
     }
 
     @Test
+    fun `Custom LLM does not require API key`() {
+        assertThat(manager.isKeyRequiredForLlm(LlmProvider.Custom)).isFalse()
+        assertThat(manager.isKeyRequiredForLlm(LlmProvider.OpenAI)).isTrue()
+    }
+
+    @Test
+    fun `Custom STT does not require API key`() {
+        assertThat(manager.isKeyRequiredForStt(SttProvider.Custom)).isFalse()
+        assertThat(manager.isKeyRequiredForStt(SttProvider.OpenAI)).isTrue()
+    }
+
+    @Test
+    fun `effective LLM key returns empty string for missing custom key`() {
+        every { sharedPreferences.getString("api_key_custom", null) } returns null
+        assertThat(manager.getEffectiveLlmApiKey(LlmProvider.Custom)).isEmpty()
+    }
+
+    @Test
+    fun `effective STT key preserves configured custom key`() {
+        every { sharedPreferences.getString("stt_api_key_custom", null) } returns "custom-stt-key"
+        assertThat(manager.getEffectiveSttApiKey(SttProvider.Custom)).isEqualTo("custom-stt-key")
+    }
+
+    @Test
     fun `getSttApiKey for OpenAI uses STT-specific key first`() {
         every { sharedPreferences.getString("stt_api_key_openai", null) } returns "stt_openai"
 

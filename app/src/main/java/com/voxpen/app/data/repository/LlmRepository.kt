@@ -101,7 +101,8 @@ class LlmRepository
                         reasoningFormat = if (provider == LlmProvider.Vertex) null else reasoningFormatFor(model),
                         reasoningEffort = if (provider == LlmProvider.Vertex) VERTEX_REASONING_EFFORT else null,
                     )
-                val response = api.chatCompletion("Bearer $apiKey", request)
+                val authHeader = apiKey.takeIf { it.isNotBlank() }?.let { "Bearer $it" }
+                val response = api.chatCompletion(authHeader, request)
                 val raw =
                     response.choices.firstOrNull()?.message?.content
                         ?: return Result.failure(IllegalStateException("No response content"))
@@ -150,7 +151,8 @@ class LlmRepository
                     reasoningFormat = if (provider == LlmProvider.Vertex) null else reasoningFormatFor(model),
                     reasoningEffort = if (provider == LlmProvider.Vertex) VERTEX_REASONING_EFFORT else null,
                 )
-                val response = api.chatCompletion("Bearer $apiKey", request)
+                val authHeader = apiKey.takeIf { it.isNotBlank() }?.let { "Bearer $it" }
+                val response = api.chatCompletion(authHeader, request)
                 val raw = response.choices.firstOrNull()?.message?.content
                     ?: return Result.failure(IllegalStateException("No response content"))
                 Result.success(stripThinkingTags(raw))

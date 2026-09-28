@@ -212,11 +212,6 @@ class SettingsViewModel
         fun setLlmProvider(provider: LlmProvider) {
             viewModelScope.launch {
                 preferencesManager.setLlmProvider(provider)
-                // Custom has no preset models; overwriting would erase the last
-                // selected model and break the customLlmModel fallback.
-                if (provider.defaultModelId.isNotBlank()) {
-                    preferencesManager.setLlmModel(provider.defaultModelId)
-                }
             }
         }
 
@@ -304,7 +299,7 @@ class SettingsViewModel
                 } else {
                     state.llmModel
                 }
-            val apiKey = apiKeyManager.getApiKey(state.llmProvider).orEmpty()
+            val apiKey = apiKeyManager.getEffectiveLlmApiKey(state.llmProvider)
             _uiState.update { it.copy(llmTestStatus = LlmTestStatus.Testing) }
             viewModelScope.launch {
                 llmRepository.editText(
