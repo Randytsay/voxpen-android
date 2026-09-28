@@ -12,6 +12,7 @@ import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.SttProvider
 import com.voxpen.app.data.repository.TranscriptionRepository
 import com.voxpen.app.domain.usecase.RetryTranscriptionUseCase
+import com.voxpen.app.domain.usecase.SrtImportResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -110,6 +111,31 @@ class TranscriptionViewModel
 
         fun setLanguage(language: SttLanguage) {
             _uiState.update { it.copy(selectedLanguage = language) }
+        }
+
+        fun onSrtFileSelected() {
+            val proStatus = proStatusResolver.proStatus.value
+            if (!proStatus.isPro && !usageLimiter.canUseRefinement()) {
+                _uiState.update { it.copy(showUpgradePrompt = true) }
+                return
+            }
+            _uiState.update { it.copy(isRefiningSrt = true, error = null) }
+        }
+
+        fun onSrtRefineComplete(result: SrtImportResult) {
+            val proStatus = proStatusResolver.proStatus.value
+            if (!proStatus.isPro) {
+                usageLimiter.incrementRefinement()
+            }
+            _uiState.update { it.copy(isRefiningSrt = false, srtImportResult = result) }
+        }
+
+        fun onSrtRefineError(message: String) {
+            _uiState.update { it.copy(isRefiningSrt = false, error = message) }
+        }
+
+        fun dismissSrtImportResult() {
+            _uiState.update { it.copy(srtImportResult = null) }
         }
 
         fun onTranscriptionError(message: String) {

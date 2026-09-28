@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -87,8 +89,7 @@ fun TranscriptionScreenContent(
         ) { uri ->
             uri ?: return@rememberLauncherForActivityResult
             viewModel.onFileSelected(uri)
-            // Check if onFileSelected rejected due to limits
-            if (!state.isTranscribing && state.error != null) return@rememberLauncherForActivityResult
+            if (!viewModel.uiState.value.isTranscribing) return@rememberLauncherForActivityResult
             scope.launch {
                 try {
                     val fileBytes =
@@ -175,6 +176,81 @@ fun TranscriptionScreenContent(
             }
         }
 
+    val srtPicker =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            uri ?: return@rememberLauncherForActivityResult
+            val fileName =
+                documentDisplayName(context, uri)
+                    ?: uri.lastPathSegment?.substringAfterLast('/')
+                    ?: "subtitles.srt"
+            if (!fileName.endsWith(".srt", ignoreCase = true)) {
+                viewModel.onSrtRefineError(context.getString(R.string.transcription_srt_invalid))
+                return@rememberLauncherForActivityResult
+            }
+            viewModel.onSrtFileSelected()
+            if (!viewModel.uiState.value.isRefiningSrt) return@rememberLauncherForActivityResult
+
+            scope.launch {
+                try {
+                    val content =
+                        withContext(Dispatchers.IO) {
+                            context.contentResolver.openInputStream(uri)?.readBytes()?.decodeToString()
+                        }
+                    if (content == null) {
+                        viewModel.onSrtRefineError("Could not read file")
+                        return@launch
+                    }
+                    val entryPoint =
+                        EntryPointAccessors.fromApplication(
+                            context.applicationContext,
+                            TranscriptionEntryPoint::class.java,
+                        )
+                    val apiKeyManager = entryPoint.apiKeyManager()
+                    val prefsManager = entryPoint.preferencesManager()
+                    val llmProvider = prefsManager.llmProviderFlow.first()
+                    val llmApiKey = apiKeyManager.getEffectiveLlmApiKey(llmProvider)
+                    val llmModel =
+                        if (llmProvider == LlmProvider.Custom) {
+                            prefsManager.customLlmModelFlow.first().ifBlank { prefsManager.llmModelFlow.first() }
+                        } else {
+                            prefsManager.llmModelFlow.first()
+                        }
+                    val language = viewModel.uiState.value.selectedLanguage
+                    val customPrompt =
+                        prefsManager.customPromptFlow(PreferencesManager.languageToKey(language)).first()
+                    val customLlmBaseUrl =
+                        when (llmProvider) {
+                            LlmProvider.Custom -> apiKeyManager.getCustomBaseUrl()
+                            LlmProvider.Vertex -> apiKeyManager.getVertexGatewayUrl()
+                            else -> null
+                        }
+                    val result =
+                        withContext(Dispatchers.IO) {
+                            entryPoint.importSrtUseCase()(
+                                content = content,
+                                fileName = fileName,
+                                language = language,
+                                apiKey = llmApiKey,
+                                model = llmModel,
+                                provider = llmProvider,
+                                customBaseUrl = customLlmBaseUrl,
+                                tone = prefsManager.toneStyleFlow.first(),
+                                vocabulary = entryPoint.dictionaryRepository().getWords(500),
+                                customPrompt = customPrompt,
+                            )
+                        }
+                    result.fold(
+                        onSuccess = { viewModel.onSrtRefineComplete(it) },
+                        onFailure = { viewModel.onSrtRefineError(it.message ?: "Refinement failed") },
+                    )
+                } catch (e: Exception) {
+                    viewModel.onSrtRefineError(e.message ?: "Unknown error")
+                }
+            }
+        }
+
     if (state.showUpgradePrompt) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissUpgradePrompt() },
@@ -194,6 +270,59 @@ fun TranscriptionScreenContent(
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissUpgradePrompt() }) {
                     Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
+    state.srtImportResult?.let { imported ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissSrtImportResult() },
+            title = { Text(imported.fileName) },
+            text = {
+                Column {
+                    Text(
+                        stringResource(R.string.transcription_refine_srt_result),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Text(
+                        imported.refinedText,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 6,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        shareSrtText(
+                            context = context,
+                            subject = imported.fileName.substringBeforeLast('.') + ".srt",
+                            text = imported.refinedSrt,
+                        )
+                    },
+                ) {
+                    Text(stringResource(R.string.transcription_share_refined_srt))
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            shareSrtText(
+                                context = context,
+                                subject = imported.fileName.substringBeforeLast('.') + ".txt",
+                                text = imported.refinedText,
+                            )
+                        },
+                    ) {
+                        Text(stringResource(R.string.transcription_share_refined_txt))
+                    }
+                    TextButton(onClick = { viewModel.dismissSrtImportResult() }) {
+                        Text(stringResource(android.R.string.cancel))
+                    }
                 }
             },
         )
@@ -267,8 +396,32 @@ fun TranscriptionScreenContent(
                         )
                     }
                 }
-                if (state.isTranscribing) {
-                    TranscribingIndicator(state.progress)
+                if (!state.isTranscribing && !state.isRefiningSrt) {
+                    TextButton(
+                        onClick = {
+                            srtPicker.launch(
+                                arrayOf(
+                                    "application/x-subrip",
+                                    "application/octet-stream",
+                                    "text/plain",
+                                ),
+                            )
+                        },
+                    ) {
+                        Column {
+                            Text(stringResource(R.string.transcription_refine_srt))
+                            Text(
+                                stringResource(R.string.transcription_refine_srt_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                when {
+                    state.isTranscribing -> TranscribingIndicator(state.progress)
+                    state.isRefiningSrt ->
+                        TranscribingIndicator(stringResource(R.string.transcription_refining_srt))
                 }
                 state.error?.let { error ->
                     ErrorBanner(error) { viewModel.clearError() }
@@ -544,3 +697,31 @@ private fun shareTranscription(
         }
     context.startActivity(Intent.createChooser(intent, null))
 }
+
+private fun shareSrtText(
+    context: Context,
+    subject: String,
+    text: String,
+) {
+    val intent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+        }
+    context.startActivity(Intent.createChooser(intent, null))
+}
+
+private fun documentDisplayName(
+    context: Context,
+    uri: Uri,
+): String? =
+    runCatching {
+        context.contentResolver
+            .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index < 0) null else cursor.getString(index)
+            }
+    }.getOrNull()

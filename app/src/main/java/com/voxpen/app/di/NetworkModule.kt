@@ -14,7 +14,12 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
+import javax.inject.Qualifier
 import javax.inject.Singleton
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class SttClient
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -49,6 +54,16 @@ object NetworkModule {
             .writeTimeout(60, TimeUnit.SECONDS)
             .build()
     }
+
+    @Provides
+    @Singleton
+    @SttClient
+    fun provideSttOkHttpClient(baseClient: OkHttpClient): OkHttpClient =
+        baseClient.newBuilder()
+            .readTimeout(300, TimeUnit.SECONDS)
+            .writeTimeout(300, TimeUnit.SECONDS)
+            .callTimeout(300, TimeUnit.SECONDS)
+            .build()
 
     @Provides
     @Singleton

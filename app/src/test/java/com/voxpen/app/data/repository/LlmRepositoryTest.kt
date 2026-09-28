@@ -38,10 +38,16 @@ class LlmRepositoryTest {
     }
 
     private fun enqueueSuccess(content: String = "Polished text") {
+        val escaped =
+            content
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
         server.enqueue(
             MockResponse()
                 .setBody(
-                    """{"id":"c1","choices":[{"index":0,"message":{"role":"assistant","content":"$content"}}]}""",
+                    """{"id":"c1","choices":[{"index":0,"message":{"role":"assistant","content":"$escaped"}}]}""",
                 )
                 .setHeader("Content-Type", "application/json"),
         )
@@ -415,4 +421,114 @@ class LlmRepositoryTest {
 
             assertThat(result.isFailure).isTrue()
         }
+
+    @Test
+    fun `segment refinement preserves timestamps and accepts tolerant numbered forms`() =
+        runTest {
+            enqueueSuccess("[1]: 第一段\n2: 第二段")
+            val original =
+                listOf(
+                    TranscriptionSegment(100, 900, "原始一"),
+                    TranscriptionSegment(900, 1800, "原始二"),
+                )
+
+            val result =
+                repository.refineSegments(
+                    segments = original,
+                    language = SttLanguage.Chinese,
+                    apiKey = "key",
+                    provider = LlmProvider.Custom,
+                    customBaseUrl = server.url("/").toString(),
+                ).getOrThrow()
+
+            assertThat(result[0]).isEqualTo(TranscriptionSegment(100, 900, "第一段"))
+            assertThat(result[1]).isEqualTo(TranscriptionSegment(900, 1800, "第二段"))
+        }
+
+    @Test
+    fun `segment refinement keeps original cue when model omits its index`() =
+        runTest {
+            enqueueSuccess("1|updated first")
+            val original =
+                listOf(
+                    TranscriptionSegment(0, 1000, "first"),
+                    TranscriptionSegment(1000, 2000, "second"),
+                )
+
+            val result =
+                repository.refineSegments(
+                    segments = original,
+                    language = SttLanguage.English,
+                    apiKey = "key",
+                    provider = LlmProvider.Custom,
+                    customBaseUrl = server.url("/").toString(),
+                ).getOrThrow()
+
+            assertThat(result[0].text).isEqualTo("updated first")
+            assertThat(result[1].text).isEqualTo("second")
+        }
+
+    @Test
+    fun `segment refinement batches more than forty cues with global indexes`() =
+        runTest {
+            val firstBatch = (1..40).joinToString("\n") { "$it|refined $it" }
+            enqueueSuccess(firstBatch)
+            enqueueSuccess("41|refined 41")
+            val segments =
+                (1..41).map { index ->
+                    TranscriptionSegment(index * 100L, index * 100L + 90L, "raw $index")
+                }
+
+            val result =
+                repository.refineSegments(
+                    segments = segments,
+                    language = SttLanguage.English,
+                    apiKey = "key",
+                    provider = LlmProvider.Custom,
+                    customBaseUrl = server.url("/").toString(),
+                ).getOrThrow()
+
+            assertThat(result).hasSize(41)
+            assertThat(result.first().text).isEqualTo("refined 1")
+            assertThat(result.last().text).isEqualTo("refined 41")
+            val firstRequest = server.takeRequest().body.readUtf8()
+            val secondRequest = server.takeRequest().body.readUtf8()
+            assertThat(firstRequest).contains("40|raw 40")
+            assertThat(secondRequest).contains("41|raw 41")
+        }
+
+    @Test
+    fun `keyless custom segment refinement omits authorization header`() =
+        runTest {
+            enqueueSuccess("1|clean")
+
+            val result =
+                repository.refineSegments(
+                    segments = listOf(TranscriptionSegment(0, 1000, "raw")),
+                    language = SttLanguage.English,
+                    apiKey = "",
+                    provider = LlmProvider.Custom,
+                    customBaseUrl = server.url("/").toString(),
+                )
+
+            assertThat(result.isSuccess).isTrue()
+            assertThat(server.takeRequest().getHeader("Authorization")).isNull()
+        }
+
+    @Test
+    fun `dynamic token budget grows for long text and caps at sixteen thousand`() {
+        assertThat(LlmRepository.maxTokensFor("short")).isEqualTo(4096)
+        assertThat(LlmRepository.maxTokensFor("x".repeat(3000))).isEqualTo(7024)
+        assertThat(LlmRepository.maxTokensFor("x".repeat(20_000))).isEqualTo(16_384)
+    }
+
+    @Test
+    fun `clean output strips thinking and echoed speech wrapper`() {
+        val result =
+            LlmRepository.cleanLlmOutput(
+                "<think>hidden</think><speech>Clean result</speech>",
+            )
+
+        assertThat(result).isEqualTo("Clean result")
+    }
 }

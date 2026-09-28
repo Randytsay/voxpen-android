@@ -12,6 +12,7 @@ import com.voxpen.app.data.remote.ChatMessage
 import com.voxpen.app.data.remote.SttApi
 import com.voxpen.app.data.remote.SttApiFactory
 import com.voxpen.app.data.remote.WhisperResponse
+import com.voxpen.app.data.remote.WhisperSegment
 import com.voxpen.app.data.repository.LlmRepository
 import com.voxpen.app.data.repository.SttRepository
 import com.voxpen.app.data.repository.TranscriptionRepository
@@ -33,6 +34,7 @@ class TranscribeFileUseCaseTest {
     private lateinit var chatCompletionApi: ChatCompletionApi
     private lateinit var apiFactory: ChatCompletionApiFactory
     private lateinit var refineTextUseCase: RefineTextUseCase
+    private lateinit var refineSegmentsUseCase: RefineSegmentsUseCase
     private lateinit var useCase: TranscribeFileUseCase
 
     private fun chatResponse(content: String) =
@@ -52,7 +54,14 @@ class TranscribeFileUseCaseTest {
         every { apiFactory.create(any()) } returns chatCompletionApi
         val llmRepository = LlmRepository(apiFactory)
         refineTextUseCase = RefineTextUseCase(llmRepository)
-        useCase = TranscribeFileUseCase(sttRepository, transcriptionRepository, refineTextUseCase)
+        refineSegmentsUseCase = RefineSegmentsUseCase(llmRepository)
+        useCase =
+            TranscribeFileUseCase(
+                sttRepository,
+                transcriptionRepository,
+                refineTextUseCase,
+                refineSegmentsUseCase,
+            )
     }
 
     @Test
@@ -247,6 +256,81 @@ class TranscribeFileUseCaseTest {
 
             assertThat(result.isSuccess).isTrue()
             assertThat(entitySlot.captured.refinedText).isEqualTo("polished locally")
+        }
+
+    @Test
+    fun `should persist refined cue text while preserving original segment timestamps`() =
+        runTest {
+            val pcmData = ByteArray(100) { (it % 256).toByte() }
+            val wavBytes = AudioEncoder.pcmToWav(pcmData, 16000, 1, 16)
+            coEvery { sttApi.transcribe(any(), any(), any(), any(), any(), any()) } returns
+                WhisperResponse(
+                    text = "原始 字幕",
+                    segments =
+                        listOf(
+                            WhisperSegment(id = 0, start = 0.25, end = 1.5, text = "原始"),
+                            WhisperSegment(id = 1, start = 1.5, end = 2.75, text = "字幕"),
+                        ),
+                )
+            coEvery { chatCompletionApi.chatCompletion(any(), any()) } returnsMany
+                listOf(
+                    chatResponse("完整潤飾文字"),
+                    chatResponse("1|潤飾一\n2|潤飾二"),
+                )
+            val entitySlot = slot<TranscriptionEntity>()
+            coEvery { transcriptionRepository.insert(capture(entitySlot)) } returns 9L
+
+            val result =
+                useCase(
+                    fileBytes = wavBytes,
+                    fileName = "subtitled.wav",
+                    language = SttLanguage.Chinese,
+                    apiKey = "stt-key",
+                    refinementApiKey = "llm-key",
+                    llmModel = "gpt-4o-mini",
+                    llmProvider = LlmProvider.OpenAI,
+                )
+
+            assertThat(result.isSuccess).isTrue()
+            assertThat(entitySlot.captured.refinedSegmentsJson).contains("潤飾一")
+            assertThat(entitySlot.captured.refinedSegmentsJson).contains("潤飾二")
+            assertThat(entitySlot.captured.refinedSegmentsJson).contains("\"s\":250")
+            assertThat(entitySlot.captured.refinedSegmentsJson).contains("\"e\":1500")
+        }
+
+    @Test
+    fun `segment refinement failure should not fail transcription or discard full text refinement`() =
+        runTest {
+            val pcmData = ByteArray(100) { (it % 256).toByte() }
+            val wavBytes = AudioEncoder.pcmToWav(pcmData, 16000, 1, 16)
+            coEvery { sttApi.transcribe(any(), any(), any(), any(), any(), any()) } returns
+                WhisperResponse(
+                    text = "raw text",
+                    segments = listOf(WhisperSegment(id = 0, start = 0.0, end = 1.0, text = "raw text")),
+                )
+            coEvery { chatCompletionApi.chatCompletion(any(), any()) } returnsMany
+                listOf(
+                    chatResponse("polished text"),
+                    ChatCompletionResponse(choices = emptyList()),
+                )
+            val entitySlot = slot<TranscriptionEntity>()
+            coEvery { transcriptionRepository.insert(capture(entitySlot)) } returns 10L
+
+            val result =
+                useCase(
+                    fileBytes = wavBytes,
+                    fileName = "fallback.wav",
+                    language = SttLanguage.English,
+                    apiKey = "stt-key",
+                    refinementApiKey = "llm-key",
+                    llmModel = "gpt-4o-mini",
+                    llmProvider = LlmProvider.OpenAI,
+                )
+
+            assertThat(result.isSuccess).isTrue()
+            assertThat(entitySlot.captured.refinedText).isEqualTo("polished text")
+            assertThat(entitySlot.captured.refinedSegmentsJson).isNull()
+            assertThat(entitySlot.captured.segmentsJson).contains("raw text")
         }
 
     @Test

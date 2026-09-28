@@ -269,10 +269,52 @@ class AppDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun migration15To16AddsRefinedSegmentsWithoutRemovingTranscriptionData() {
+        helper.createDatabase(SRT_REFINEMENT_MIGRATION_DB, 15).apply {
+            execSQL(
+                """
+                INSERT INTO transcriptions (
+                    fileName, originalText, refinedText, language, durationMs,
+                    fileSizeBytes, segmentsJson, status, errorMessage, audioPath,
+                    provider, createdAt
+                ) VALUES (
+                    'demo.wav', '原文', '潤飾後', 'zh', NULL,
+                    1234, '[{"s":0,"e":1000,"t":"原文"}]', 'completed', NULL, NULL,
+                    'groq', 100
+                )
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val db =
+            helper.runMigrationsAndValidate(
+                SRT_REFINEMENT_MIGRATION_DB,
+                16,
+                true,
+                AppDatabase.MIGRATION_15_16,
+            )
+        val data =
+            db.query(
+                "SELECT fileName, originalText, refinedSegmentsJson FROM transcriptions WHERE fileName = 'demo.wav'",
+            )
+        try {
+            assertThat(data.moveToFirst()).isTrue()
+            assertThat(data.getString(0)).isEqualTo("demo.wav")
+            assertThat(data.getString(1)).isEqualTo("原文")
+            assertThat(data.isNull(2)).isTrue()
+        } finally {
+            data.close()
+            db.close()
+        }
+    }
+
     private companion object {
         private const val TEST_DB = "migration-test"
         private const val TONE_MIGRATION_DB = "migration-tone-test"
         private const val CONTEXT_MIGRATION_DB = "migration-context-test"
         private const val CANDIDATE_INDEX_MIGRATION_DB = "migration-candidate-index-test"
+        private const val SRT_REFINEMENT_MIGRATION_DB = "migration-srt-refinement-test"
     }
 }

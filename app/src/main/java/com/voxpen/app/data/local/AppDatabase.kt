@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         HybridContextLearningEntity::class,
         ClipboardEntry::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -264,6 +264,15 @@ abstract class AppDatabase : RoomDatabase() {
                     db.execSQL(
                         "CREATE INDEX IF NOT EXISTS index_hybrid_lexicon_source_initials " +
                             "ON hybrid_lexicon (source, initials)",
+                    )
+                }
+            }
+
+        val MIGRATION_15_16 =
+            object : Migration(15, 16) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE transcriptions ADD COLUMN refinedSegmentsJson TEXT DEFAULT NULL",
                     )
                 }
             }

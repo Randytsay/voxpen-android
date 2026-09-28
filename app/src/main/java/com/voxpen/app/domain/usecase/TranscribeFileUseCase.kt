@@ -21,6 +21,7 @@ class TranscribeFileUseCase
         private val sttRepository: SttRepository,
         private val transcriptionRepository: TranscriptionRepository,
         private val refineTextUseCase: RefineTextUseCase,
+        private val refineSegmentsUseCase: RefineSegmentsUseCase,
     ) {
         suspend operator fun invoke(
             fileBytes: ByteArray,
@@ -87,7 +88,8 @@ class TranscribeFileUseCase
 
             val hasRefinementKey =
                 !refinementApiKey.isNullOrBlank() || llmProvider == LlmProvider.Custom
-            val refinedText = if (hasRefinementKey && llmProvider != null && llmModel != null) {
+            val refinementConfigured = hasRefinementKey && llmProvider != null && llmModel != null
+            val refinedText = if (refinementConfigured) {
                 refineTextUseCase(
                     text = mergedText,
                     language = language,
@@ -102,6 +104,29 @@ class TranscribeFileUseCase
             } else {
                 null
             }
+
+            val refinedSegments =
+                if (refinementConfigured && allSegments.isNotEmpty()) {
+                    refineSegmentsUseCase(
+                        segments = allSegments,
+                        language = language,
+                        apiKey = refinementApiKey.orEmpty(),
+                        model = llmModel,
+                        vocabulary = vocabulary,
+                        customPrompt = customPrompt,
+                        tone = tone,
+                        provider = llmProvider,
+                        customBaseUrl = customLlmBaseUrl,
+                    ).getOrNull()
+                } else {
+                    null
+                }
+            val refinedSegmentsJson =
+                refinedSegments?.let { segments ->
+                    Json.encodeToString(
+                        segments.map { StoredSegment(it.startMs, it.endMs, it.text) },
+                    )
+                }
 
             val segmentsJson = if (allSegments.isNotEmpty()) {
                 Json.encodeToString(allSegments.map { StoredSegment(it.startMs, it.endMs, it.text) })
@@ -118,6 +143,7 @@ class TranscribeFileUseCase
                     language = languageKey,
                     fileSizeBytes = fileBytes.size.toLong(),
                     segmentsJson = segmentsJson,
+                    refinedSegmentsJson = refinedSegmentsJson,
                     status = TranscriptionEntity.STATUS_COMPLETED,
                     provider = sttProvider.key,
                     createdAt = System.currentTimeMillis(),

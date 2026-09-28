@@ -1,6 +1,7 @@
 package com.voxpen.app.util
 
 import com.voxpen.app.data.local.TranscriptionEntity
+import com.voxpen.app.data.repository.TranscriptionSegment
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -24,18 +25,8 @@ object ExportHelper {
         }
 
     fun toSrt(entity: TranscriptionEntity): String {
-        val segments = parseSegments(entity.segmentsJson)
-
-        if (segments != null) {
-            return buildString {
-                segments.forEachIndexed { index, seg ->
-                    appendLine("${index + 1}")
-                    appendLine("${formatSrtTimestamp(seg.startMs)} --> ${formatSrtTimestamp(seg.endMs)}")
-                    appendLine(seg.text.trim())
-                    appendLine()
-                }
-            }
-        }
+        parseSegments(entity.refinedSegmentsJson)?.let { return segmentsToSrt(it) }
+        parseSegments(entity.segmentsJson)?.let { return segmentsToSrt(it) }
 
         // Fallback to estimated timestamps for old entries without segments
         val text = entity.displayText
@@ -53,6 +44,22 @@ object ExportHelper {
         }
     }
 
+    fun segmentsToSrt(segments: List<TranscriptionSegment>): String =
+        buildString {
+            segments.forEachIndexed { index, segment ->
+                appendLine("${index + 1}")
+                appendLine("${formatSrtTimestamp(segment.startMs)} --> ${formatSrtTimestamp(segment.endMs)}")
+                appendLine(segment.text.trim())
+                appendLine()
+            }
+        }
+
+    fun segmentsToText(segments: List<TranscriptionSegment>): String =
+        segments
+            .map { it.text.trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString(" ")
+
     fun formatSrtTimestamp(ms: Long): String {
         val hours = ms / 3_600_000
         val minutes = (ms % 3_600_000) / 60_000
@@ -61,11 +68,11 @@ object ExportHelper {
         return "%02d:%02d:%02d,%03d".format(hours, minutes, seconds, millis)
     }
 
-    private fun parseSegments(json: String?): List<ParsedSegment>? {
+    private fun parseSegments(json: String?): List<TranscriptionSegment>? {
         if (json.isNullOrBlank()) return null
         return try {
             Json.decodeFromString<List<StoredSegment>>(json).map {
-                ParsedSegment(it.s, it.e, it.t)
+                TranscriptionSegment(it.s, it.e, it.t)
             }
         } catch (_: Exception) {
             null
@@ -79,8 +86,6 @@ object ExportHelper {
         return sentences.ifEmpty { listOf(text) }
     }
 }
-
-private data class ParsedSegment(val startMs: Long, val endMs: Long, val text: String)
 
 @Serializable
 private data class StoredSegment(val s: Long, val e: Long, val t: String)
