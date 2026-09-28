@@ -3,11 +3,13 @@ package com.voxpen.app.data.local
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
+import com.voxpen.app.data.model.LlmProvider
 import com.voxpen.app.data.model.RecordingMode
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.SttProvider
 import com.voxpen.app.data.model.ToneStyle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -93,6 +95,59 @@ class PreferencesManagerTest {
     @Test
     fun `default LLM model should be llama-3_3-70b-versatile`() {
         assertThat(PreferencesManager.DEFAULT_LLM_MODEL).isEqualTo("llama-3.3-70b-versatile")
+    }
+
+    @Test
+    fun `switching LLM provider uses its default and restores each saved model`(
+        @TempDir tempDir: File,
+    ) = runTest {
+        val prefs = createPreferencesManager(tempDir)
+        prefs.setLlmModel("qwen/qwen3-32b")
+
+        prefs.setLlmProvider(LlmProvider.Vertex)
+        assertThat(prefs.llmModelFlow.first()).isEqualTo(LlmProvider.Vertex.defaultModelId)
+        prefs.setLlmModel("google/gemini-custom")
+
+        prefs.setLlmProvider(LlmProvider.Groq)
+        assertThat(prefs.llmModelFlow.first()).isEqualTo("qwen/qwen3-32b")
+        prefs.setLlmProvider(LlmProvider.Vertex)
+        assertThat(prefs.llmModelFlow.first()).isEqualTo("google/gemini-custom")
+    }
+
+    @Test
+    fun `switching providers preserves an existing OpenAI model`(
+        @TempDir tempDir: File,
+    ) = runTest {
+        val prefs = createPreferencesManager(tempDir)
+        prefs.setLlmProvider(LlmProvider.OpenAI)
+        prefs.setLlmModel("gpt-4.1-mini")
+        prefs.setLlmProvider(LlmProvider.Groq)
+        prefs.setLlmProvider(LlmProvider.OpenAI)
+        assertThat(prefs.llmModelFlow.first()).isEqualTo("gpt-4.1-mini")
+    }
+
+    @Test
+    fun `reselecting same LLM provider does not reset its model`(
+        @TempDir tempDir: File,
+    ) = runTest {
+        val prefs = createPreferencesManager(tempDir)
+        prefs.setLlmModel("qwen/qwen3-32b")
+        prefs.setLlmProvider(LlmProvider.Groq)
+        assertThat(prefs.llmModelFlow.first()).isEqualTo("qwen/qwen3-32b")
+    }
+
+    @Test
+    fun `custom LLM model is retained while switching providers`(
+        @TempDir tempDir: File,
+    ) = runTest {
+        val prefs = createPreferencesManager(tempDir)
+        prefs.setCustomLlmModel("my-local-model")
+        prefs.setLlmProvider(LlmProvider.Custom)
+        prefs.setLlmProvider(LlmProvider.Vertex)
+        prefs.setLlmProvider(LlmProvider.Custom)
+        assertThat(prefs.customLlmModelFlow.first()).isEqualTo("my-local-model")
+        prefs.setLlmProvider(LlmProvider.Groq)
+        assertThat(prefs.llmModelFlow.first()).isEqualTo(PreferencesManager.DEFAULT_LLM_MODEL)
     }
 
     @Test

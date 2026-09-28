@@ -256,8 +256,11 @@ constructor(
         model: String,
     ) {
         dataStore.edit { prefs ->
-            prefs[LLM_MODEL_KEY] =
-                model
+            prefs[LLM_MODEL_KEY] = model
+            val provider = LlmProvider.fromKey(prefs[LLM_PROVIDER_KEY] ?: LlmProvider.DEFAULT.key)
+            if (provider != LlmProvider.Custom) {
+                prefs[llmModelKey(provider)] = model
+            }
         }
     }
 
@@ -265,8 +268,17 @@ constructor(
         provider: LlmProvider,
     ) {
         dataStore.edit { prefs ->
-            prefs[LLM_PROVIDER_KEY] =
-                provider.key
+            val previous = LlmProvider.fromKey(prefs[LLM_PROVIDER_KEY] ?: LlmProvider.DEFAULT.key)
+            if (previous != provider) {
+                // Keep a legacy single-model choice before changing providers.
+                if (previous != LlmProvider.Custom) {
+                    prefs[llmModelKey(previous)] = prefs[LLM_MODEL_KEY] ?: DEFAULT_LLM_MODEL
+                }
+                if (provider != LlmProvider.Custom) {
+                    prefs[LLM_MODEL_KEY] = prefs[llmModelKey(provider)] ?: provider.defaultModelId
+                }
+                prefs[LLM_PROVIDER_KEY] = provider.key
+            }
         }
     }
 
@@ -561,6 +573,9 @@ constructor(
             stringPreferencesKey(
                 "llm_model",
             )
+
+        private fun llmModelKey(provider: LlmProvider) =
+            stringPreferencesKey("llm_model_${provider.key}")
 
         private val TONE_STYLE_KEY =
             stringPreferencesKey(
