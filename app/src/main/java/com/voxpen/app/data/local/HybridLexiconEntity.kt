@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
         Index(value = ["normalizedCode"]),
         Index(value = ["initials"]),
         Index(value = ["source"]),
+        Index(value = ["source", "normalizedCode"]),
+        Index(value = ["source", "initials"]),
         Index(
             value = ["phrase", "normalizedCode", "source", "toneCode"],
             unique = true,

@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         HybridContextLearningEntity::class,
         ClipboardEntry::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -251,6 +251,20 @@ abstract class AppDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE clipboard_entries ADD COLUMN isFavorite INTEGER NOT NULL DEFAULT 0")
                     db.execSQL("ALTER TABLE clipboard_entries ADD COLUMN lastUsedAt INTEGER NOT NULL DEFAULT 0")
                     db.execSQL("UPDATE clipboard_entries SET lastUsedAt = updatedAt WHERE type = 'COMMON'")
+                }
+            }
+
+        val MIGRATION_14_15 =
+            object : Migration(14, 15) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_hybrid_lexicon_source_normalizedCode " +
+                            "ON hybrid_lexicon (source, normalizedCode)",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS index_hybrid_lexicon_source_initials " +
+                            "ON hybrid_lexicon (source, initials)",
+                    )
                 }
             }
     }

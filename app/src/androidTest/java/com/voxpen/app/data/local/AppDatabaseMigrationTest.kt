@@ -227,9 +227,52 @@ class AppDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun migration14To15AddsCandidateLookupIndexesWithoutRemovingData() {
+        helper.createDatabase(CANDIDATE_INDEX_MIGRATION_DB, 14).apply {
+            execSQL(
+                """
+                INSERT INTO hybrid_lexicon (
+                    phrase, code, normalizedCode, initials, source, baseWeight,
+                    frequencyWeight, usageCount, lastUsedAt, createdAt, personalKind, toneCode
+                ) VALUES ('台達', 'tai da', 'taida', 'td', 'PERSONAL', 0, NULL, 2, 100, 50, 'MANUAL', '')
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val db =
+            helper.runMigrationsAndValidate(
+                CANDIDATE_INDEX_MIGRATION_DB,
+                15,
+                true,
+                AppDatabase.MIGRATION_14_15,
+            )
+        val indexes = db.query("PRAGMA index_list(hybrid_lexicon)")
+        val names = mutableSetOf<String>()
+        try {
+            while (indexes.moveToNext()) names += indexes.getString(1)
+        } finally {
+            indexes.close()
+        }
+        assertThat(names).contains("index_hybrid_lexicon_source_normalizedCode")
+        assertThat(names).contains("index_hybrid_lexicon_source_initials")
+
+        val data = db.query("SELECT phrase, usageCount FROM hybrid_lexicon WHERE normalizedCode = 'taida'")
+        try {
+            assertThat(data.moveToFirst()).isTrue()
+            assertThat(data.getString(0)).isEqualTo("台達")
+            assertThat(data.getInt(1)).isEqualTo(2)
+        } finally {
+            data.close()
+            db.close()
+        }
+    }
+
     private companion object {
         private const val TEST_DB = "migration-test"
         private const val TONE_MIGRATION_DB = "migration-tone-test"
         private const val CONTEXT_MIGRATION_DB = "migration-context-test"
+        private const val CANDIDATE_INDEX_MIGRATION_DB = "migration-candidate-index-test"
     }
 }
