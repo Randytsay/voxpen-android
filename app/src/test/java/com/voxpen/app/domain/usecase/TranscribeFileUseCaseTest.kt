@@ -259,6 +259,34 @@ class TranscribeFileUseCaseTest {
         }
 
     @Test
+    fun `disabled refinement skips keyless custom LLM requests`() =
+        runTest {
+            val wavBytes = AudioEncoder.pcmToWav(ByteArray(100), 16000, 1, 16)
+            coEvery { sttApi.transcribe(any(), any(), any(), any(), any(), any()) } returns
+                WhisperResponse(text = "raw text")
+            val entitySlot = slot<TranscriptionEntity>()
+            coEvery { transcriptionRepository.insert(capture(entitySlot)) } returns 1L
+
+            val result =
+                useCase(
+                    fileBytes = wavBytes,
+                    fileName = "raw.wav",
+                    language = SttLanguage.English,
+                    apiKey = "stt-key",
+                    refinementApiKey = null,
+                    refinementEnabled = false,
+                    llmModel = "qwen2.5:7b",
+                    llmProvider = LlmProvider.Custom,
+                    customLlmBaseUrl = "http://localhost:11434/v1/",
+                )
+
+            assertThat(result.isSuccess).isTrue()
+            assertThat(entitySlot.captured.refinedText).isNull()
+            assertThat(entitySlot.captured.refinedSegmentsJson).isNull()
+            coVerify(exactly = 0) { chatCompletionApi.chatCompletion(any(), any()) }
+        }
+
+    @Test
     fun `should persist refined cue text while preserving original segment timestamps`() =
         runTest {
             val pcmData = ByteArray(100) { (it % 256).toByte() }

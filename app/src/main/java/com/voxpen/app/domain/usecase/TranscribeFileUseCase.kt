@@ -33,6 +33,7 @@ class TranscribeFileUseCase
             sttModel: String = sttProvider.defaultModelId,
             customSttBaseUrl: String? = null,
             refinementApiKey: String? = null,
+            refinementEnabled: Boolean = refinementApiKey != null,
             llmModel: String? = null,
             llmProvider: LlmProvider? = null,
             customLlmBaseUrl: String? = null,
@@ -88,7 +89,7 @@ class TranscribeFileUseCase
 
             val hasRefinementKey =
                 !refinementApiKey.isNullOrBlank() || llmProvider == LlmProvider.Custom
-            val refinementConfigured = hasRefinementKey && llmProvider != null && llmModel != null
+            val refinementConfigured = refinementEnabled && hasRefinementKey && llmProvider != null && llmModel != null
             val refinedText = if (refinementConfigured) {
                 refineTextUseCase(
                     text = mergedText,

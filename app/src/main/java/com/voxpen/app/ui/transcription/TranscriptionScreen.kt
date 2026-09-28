@@ -64,6 +64,7 @@ import com.voxpen.app.data.model.LlmProvider
 import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.SttProvider
 import com.voxpen.app.util.ExportHelper
+import com.voxpen.app.util.SrtFileReader
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -154,6 +155,7 @@ fun TranscriptionScreenContent(
                                 sttModel = sttModel,
                                 customSttBaseUrl = customSttBaseUrl,
                                 refinementApiKey = if (refinementEnabled) llmApiKey else null,
+                                refinementEnabled = refinementEnabled,
                                 llmModel = llmModel,
                                 llmProvider = llmProvider,
                                 customLlmBaseUrl = customLlmBaseUrl,
@@ -196,7 +198,7 @@ fun TranscriptionScreenContent(
                 try {
                     val content =
                         withContext(Dispatchers.IO) {
-                            context.contentResolver.openInputStream(uri)?.readBytes()?.decodeToString()
+                            context.contentResolver.openInputStream(uri)?.use { SrtFileReader.read(it) }
                         }
                     if (content == null) {
                         viewModel.onSrtRefineError("Could not read file")

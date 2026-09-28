@@ -5,6 +5,7 @@ import com.voxpen.app.data.model.SttLanguage
 import com.voxpen.app.data.model.ToneStyle
 import com.voxpen.app.util.ExportHelper
 import com.voxpen.app.util.SrtParser
+import com.voxpen.app.util.SrtFileReader
 import javax.inject.Inject
 
 data class SrtImportResult(
@@ -32,7 +33,7 @@ class ImportSrtUseCase
             vocabulary: List<String> = emptyList(),
             customPrompt: String? = null,
         ): Result<SrtImportResult> {
-            if (content.toByteArray().size > MAX_SRT_BYTES) {
+            if (content.toByteArray().size > SrtFileReader.MAX_BYTES) {
                 return Result.failure(IllegalArgumentException("SRT file too large (max 5 MB)."))
             }
             val segments =
@@ -61,9 +62,5 @@ class ImportSrtUseCase
                     refinedText = ExportHelper.segmentsToText(refined),
                 ),
             )
-        }
-
-        companion object {
-            private const val MAX_SRT_BYTES = 5 * 1024 * 1024
         }
     }
